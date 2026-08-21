@@ -33,7 +33,7 @@ type DesktopApi = {
   importCloud: (source: string, destination: string) => Promise<Array<WorkFolder & { sourcePath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
-  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; occPath?: string; excelPath?: string }) => void) => () => void
+  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number }) => void) => () => void
 }
 
 declare global {
@@ -135,26 +135,80 @@ function App() {
   const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um den Testlauf vorzubereiten.')
   const [isRunning, setIsRunning] = useState(false)
   const [progress, setProgress] = useState({ completed: 0, total: 0, current: '', detail: '' })
+  const [currentStep, setCurrentStep] = useState('Vorbereitung')
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  function formatDuration(totalSeconds: number) {
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${String(seconds).padStart(2, '0')}`
+  }
+
+  useEffect(() => {
+    if (!isRunning || runStartedAt === null) return
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - runStartedAt) / 1000)))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [isRunning, runStartedAt])
 
   useEffect(() => window.desktopApi?.onWorkerEvent((event) => {
-    if (event.event === 'run_started') setProgress({ completed: 0, total: event.total ?? 0, current: '', detail: 'Vorbereitung' })
+    if (event.event === 'run_started') {
+      setRunStartedAt(Date.now())
+      setElapsedSeconds(0)
+      setCurrentStep('Vorbereitung')
+      setProgress({ completed: 0, total: event.itemCount ?? event.total ?? 0, current: '', detail: 'Vorbereitung' })
+    }
     if (event.event === 'item_started') {
+      setCurrentStep('Vorbereitung')
       setProgress((current) => ({ ...current, current: event.itemId ?? 'Fundordner', detail: `Eintrag ${event.index ?? 1} von ${event.total ?? current.total}` }))
       setNotice('Verarbeitung läuft. Bitte Omicron und Excel nicht bedienen.')
     }
-    if (event.event === 'occ_started') setProgress((current) => ({ ...current, detail: `Omicron-Export: ${event.occPath ?? 'OCC-Datei'}` }))
-    if (event.event === 'excel_started') setProgress((current) => ({ ...current, detail: `Excel-Verarbeitung: ${event.excelPath ?? 'Arbeitsmappe'}` }))
+    if (event.event === 'occ_started') {
+      setCurrentStep('Datenexport (OCC)')
+      setProgress((current) => ({ ...current, detail: `Omicron-Export: ${event.occPath ?? 'OCC-Datei'}` }))
+    }
+    if (event.event === 'excel_started') {
+      setCurrentStep('Excel-Bearbeitung')
+      setProgress((current) => ({ ...current, detail: `Excel-Verarbeitung: ${event.excelPath ?? 'Arbeitsmappe'}` }))
+    }
+    if (event.event === 'mashup_terminated') {
+      setCurrentStep('Mashup beenden')
+      setProgress((current) => ({ ...current, detail: 'Vorbereitung: Mashup-Loader beendet' }))
+    }
+    if (event.event === 'mashup_not_running') {
+      setCurrentStep('Mashup beenden')
+      setProgress((current) => ({ ...current, detail: 'Vorbereitung: Kein laufender Mashup-Loader gefunden' }))
+    }
+    if (event.event === 'mashup_termination_failed') {
+      setCurrentStep('Mashup beenden')
+      setProgress((current) => ({ ...current, detail: 'Vorbereitung: Mashup-Loader konnte nicht beendet werden' }))
+      setNotice(`Hinweis: Mashup-Loader konnte nicht beendet werden: ${event.message ?? 'Unbekannter Fehler'}`)
+    }
     if (event.event === 'item_completed') {
+      setCurrentStep('Abschluss')
       setFolders((current) => current.map((folder) => folder.id === event.itemId ? { ...folder, state: 'fertig' } : folder))
       setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag erfolgreich abgeschlossen' }))
     }
     if (event.event === 'item_failed') {
+      setCurrentStep('Fehlerbehandlung')
       setNotice(`Verarbeitung fehlgeschlagen: ${event.message ?? 'Unbekannter Fehler'}`)
       setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag fehlgeschlagen' }))
     }
     if (event.event === 'worker_error') setNotice(`Python-Worker-Fehler: ${event.message ?? 'Unbekannter Fehler'}`)
-    if (event.event === 'run_cancelled') setNotice('Verarbeitung kontrolliert abgebrochen.')
-    if (event.event === 'run_completed') setNotice('Verarbeitung abgeschlossen.')
+    if (event.event === 'run_cancelled') {
+      setCurrentStep('Abbruch')
+      if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
+      setNotice(`Verarbeitung kontrolliert abgebrochen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      setRunStartedAt(null)
+    }
+    if (event.event === 'run_completed') {
+      setCurrentStep('Fertig')
+      if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
+      setNotice(`Verarbeitung abgeschlossen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      setRunStartedAt(null)
+    }
   }), [])
 
   async function chooseDirectory(kind: 'cloud' | 'local') {
@@ -259,6 +313,9 @@ function App() {
       excelPath: `${folder.localPath}\\${folder.excelFiles[0]}`,
     }))
     setIsRunning(true)
+    setRunStartedAt(Date.now())
+    setElapsedSeconds(0)
+    setCurrentStep('Vorbereitung')
     setProgress({ completed: 0, total: readyFolders.length, current: '', detail: 'Worker wird gestartet' })
     setNotice('Sichtbare Omicron-Automatisierung gestartet. Bitte den Arbeitsplatz nicht bedienen.')
     try {
@@ -267,6 +324,7 @@ function App() {
       setNotice(`Worker konnte nicht gestartet werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
       setIsRunning(false)
+      setRunStartedAt(null)
     }
   }
 
@@ -326,7 +384,7 @@ function App() {
             {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}`} key={folder.id}><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
           </section>
 
-          {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern</span></div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}
+          {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern · Laufzeit {formatDuration(elapsedSeconds)}</span></div><div style={{ marginTop: 8, color: 'var(--accent-dark)', fontSize: 12 }}><strong>Aktueller Schritt:</strong> {currentStep}</div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}
           <div className="action-bar"><div className="status-message" role="status"><CircleAlert size={17} /><span>{notice}</span></div>{isRunning ? <button className="secondary-button" type="button" onClick={cancelRun}><TriangleAlert size={18} />Abbruch anfordern</button> : <button className="primary-button" type="button" onClick={runTest} disabled={!readyCount}><Play size={18} />Verarbeitung starten</button>}</div>
         </section>
       </main>

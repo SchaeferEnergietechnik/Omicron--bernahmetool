@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,6 +40,7 @@ class Worker:
     def __init__(self, job: dict[str, Any], cancel_file: Path | None):
         self.job = job
         self.cancel_file = cancel_file
+        self.run_started_monotonic: float | None = None
 
     def emit(self, event: str, **payload: Any) -> None:
         print(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **payload}, ensure_ascii=False), flush=True)
@@ -143,6 +145,23 @@ class Worker:
         except Exception:
             return
 
+    def terminate_mashup_loader(self) -> None:
+        """Stoppt den Power-Query-Mashup-Loader vor einem neuen Verarbeitungslauf."""
+        try:
+            result = subprocess.run(
+                ["taskkill", "/IM", "Microsoft.Mashup.Container.Loader.exe", "/F"],
+                capture_output=True,
+                text=True,
+                shell=False,
+            )
+            if result.returncode == 0:
+                self.emit("mashup_terminated")
+            else:
+                # Kein Fehlerfall: Prozess lief ggf. nicht.
+                self.emit("mashup_not_running")
+        except Exception as error:
+            self.emit("mashup_termination_failed", message=str(error))
+
         # Closing an OCC without changes can still show a save question. Never wait
         # for a user: discard instead, otherwise record a later file failure.
         try:
@@ -174,6 +193,11 @@ class Worker:
             self.wait(3)
         finally:
             self.close_omicron(window)
+
+    def elapsed_seconds(self) -> int:
+        if self.run_started_monotonic is None:
+            return 0
+        return max(0, int(time.monotonic() - self.run_started_monotonic))
 
     def run_macro(self, excel, workbook_name: str, macro_name: str) -> None:
         excel.Application.Run(f"'{workbook_name}'!{macro_name}")
@@ -225,6 +249,7 @@ class Worker:
 
     def run(self) -> int:
         items = self.job.get("items", [])
+        self.run_started_monotonic = time.monotonic()
         self.emit("run_started", itemCount=len(items))
         for index, item in enumerate(items, start=1):
             item_id = item.get("id", str(index))
@@ -239,6 +264,11 @@ class Worker:
                     self.emit("item_skipped", itemId=item_id, reason="OCC- oder Excel-Datei fehlt")
                     continue
                 self.emit("item_started", itemId=item_id, index=index, total=len(items))
+
+                # Gewünschte Reihenfolge pro Ordner/Eintrag:
+                # Mashup beenden -> OCC-Datenexport -> Excel-Bearbeitung
+                self.terminate_mashup_loader()
+
                 for occ_path in occ_paths:
                     self.emit("occ_started", itemId=item_id, occPath=str(occ_path))
                     self.export_occ(occ_path)
@@ -247,11 +277,11 @@ class Worker:
                 self.refresh_excel(excel_path)
                 self.emit("item_completed", itemId=item_id)
             except CancellationRequested:
-                self.emit("run_cancelled", itemId=item_id)
+                self.emit("run_cancelled", itemId=item_id, elapsedSeconds=self.elapsed_seconds())
                 return 2
             except Exception as error:
                 self.emit("item_failed", itemId=item_id, message=str(error))
-        self.emit("run_completed")
+        self.emit("run_completed", elapsedSeconds=self.elapsed_seconds())
         return 0
 
 
