@@ -335,7 +335,9 @@ class Worker:
         self.wait(2)
 
     def sanitize_filename_part(self, value: str) -> str:
-        return re.sub(r'[\\/:*?"<>|]+', "_", value).strip().strip(".")
+        sanitized = re.sub(r'[\\/:*?"<>|\[\]]+', "_", value)
+        sanitized = re.sub(r"\s+", " ", sanitized).strip().strip(".")
+        return sanitized
 
     def resolve_project_title(self, workbook, fallback_path: Path) -> str:
         for sheet_name, cell_name in (("Allgemeine Angaben", "C2"), ("Allgemeine Angaben", "B2"), ("Allgemeine Angaben", "D2")):
@@ -349,11 +351,24 @@ class Worker:
 
     def build_output_excel_path(self, source_path: Path, project_title: str) -> Path:
         date_part = time.strftime("%Y-%m-%d")
-        title = self.sanitize_filename_part(project_title) or source_path.stem
-        candidate = source_path.with_name(f"{title}_{date_part}{source_path.suffix}")
+        suffix = source_path.suffix
+        # Excel SaveAs scheitert häufig bei sehr langen Pfaden; wir halten den Dateinamen bewusst kurz.
+        title = (self.sanitize_filename_part(project_title) or source_path.stem)[:64]
+        base_name = f"{title}_{date_part}"
+        max_total_path_len = 210
+        available_name_len = max_total_path_len - len(str(source_path.parent)) - 1 - len(suffix)
+        if available_name_len < 12:
+            available_name_len = 12
+        if len(base_name) > available_name_len:
+            base_name = base_name[:available_name_len].rstrip(" ._")
+
+        candidate = source_path.with_name(f"{base_name}{suffix}")
         if candidate == source_path or not candidate.exists():
             return candidate
-        return source_path.with_name(f"{title}_{date_part}_{time.strftime('%H%M%S')}{source_path.suffix}")
+
+        alt_base = f"{base_name[:max(4, available_name_len - 7)]}_{time.strftime('%H%M%S')}"
+        alt_base = alt_base[:available_name_len].rstrip(" ._")
+        return source_path.with_name(f"{alt_base}{suffix}")
 
     def refresh_excel(self, excel_path: Path) -> Path:
         if not excel_path.is_file():

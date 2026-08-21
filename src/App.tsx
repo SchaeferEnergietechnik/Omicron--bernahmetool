@@ -54,8 +54,8 @@ type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
 }
 
-const COMPANY_NAME = 'Schäfer Energietechnik'
-const COMPANY_ADDRESS = 'Firmenadresse ergänzen'
+const COMPANY_NAME = 'G.E.S. Energietechnik GmbH'
+const COMPANY_ADDRESS = 'Ferchlipp 16, 39615 Altmärkische Wische'
 
 function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
   if (excelFiles.length !== 1) return {}
@@ -437,7 +437,7 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#main" aria-label="Omicron Übernahmetool">
-          <img className="brand-logo" src="/company-logo.svg" alt="Firmenlogo" />
+            <img className="brand-logo" src="/Logo@4x.png" alt="Firmenlogo" />
           <span><strong>Omicron</strong><small>Übernahmetool</small></span>
         </a>
         <div className="company-meta"><strong>{COMPANY_NAME}</strong><small>{COMPANY_ADDRESS}</small></div>
