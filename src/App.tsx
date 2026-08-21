@@ -24,6 +24,7 @@ type WorkFolder = {
   occFiles: string[]
   excelFiles: string[]
   state: FolderState
+  enabled?: boolean
   localPath?: string
   message?: string
   selectedExcelByOcc?: Record<string, string>
@@ -58,6 +59,7 @@ const demoFolders: WorkFolder[] = [
     occFiles: ['V24_NAP_V2_Bensheim.occ', 'V9_EZE_mit_Anregung_Bensheim.occ'],
     excelFiles: ['V19m_Übergeordneter_Entkupplungsschutz.xlsm'],
     state: 'bereit',
+    enabled: true,
     selectedExcelByOcc: {
       'V24_NAP_V2_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
       'V9_EZE_mit_Anregung_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
@@ -69,6 +71,7 @@ const demoFolders: WorkFolder[] = [
     occFiles: ['Schutzprüfung_Station_West.occ'],
     excelFiles: ['Prüfdaten_Station_West.xlsm'],
     state: 'bereit',
+    enabled: true,
     selectedExcelByOcc: {
       'Schutzprüfung_Station_West.occ': 'Prüfdaten_Station_West.xlsm',
     },
@@ -109,7 +112,7 @@ async function discoverWorkFolders(
   const folders = entries.filter((entry): entry is DirectoryHandle => entry.kind === 'directory')
   const occFiles = files.filter((file) => file.name.toLowerCase().endsWith('.occ')).map((file) => file.name)
   const excelFiles = files
-    .filter((file) => /\.xls[xm]$/i.test(file.name) && !file.name.startsWith('~$'))
+    .filter((file) => /\.xls[xm]$/i.test(file.name) && !file.name.startsWith('~$') && !file.name.toLowerCase().includes('wartung'))
     .map((file) => file.name)
   const current = occFiles.length
     ? [{ id: relativePath, path: relativePath, occFiles, excelFiles, state: 'bereit' as const, handle: directory }]
@@ -276,6 +279,16 @@ function App() {
     }))
   }
 
+  function toggleFolderEnabled(folderId: string) {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId || folder.state === 'fertig') return folder
+      return {
+        ...folder,
+        enabled: !(folder.enabled ?? true),
+      }
+    }))
+  }
+
   async function chooseDirectory(kind: 'cloud' | 'local') {
     if (window.desktopApi) {
       const selected = await window.desktopApi.chooseDirectory(kind === 'cloud' ? 'Cloud-Quellordner auswählen' : 'Lokalen Arbeitsordner auswählen')
@@ -384,6 +397,7 @@ function App() {
       return
     }
     const items = readyFolders.map((folder) => ({
+      enabled: folder.enabled ?? true,
       ...(folder.excelFiles.length === 1
         ? {
             id: folder.id,
@@ -471,7 +485,7 @@ function App() {
 
           <section className="preview" aria-labelledby="preview-heading">
             <div className="preview-heading"><div><h2 id="preview-heading">Lokale Vorschau</h2><p>{folders.length ? `${folders.length} Fundordner im lokalen Arbeitsbereich` : 'Noch keine Fundordner bereitgestellt'}</p></div><div className="counts"><span>{readyCount} bereit</span><span>{conflictCount} Konflikte</span><span>{completeCount} erledigt</span></div></div>
-            {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}`} key={folder.id}><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}{folder.state !== 'fertig' && folder.excelFiles.length > 1 ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}><small>Manuelle Zuordnung vor Start:</small>{folder.occFiles.map((occFile) => <label key={occFile} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 1fr', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--muted)' }}>{occFile}</span><select value={(folder.selectedExcelByOcc ?? {})[occFile] ?? ''} onChange={(event) => setOccExcelMapping(folder.id, occFile, event.target.value)} disabled={isRunning} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Excel auswählen...</option>{folder.excelFiles.map((excelFile) => <option key={excelFile} value={excelFile}>{excelFile}</option>)}</select></label>)}</div> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
+            {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}${!(folder.enabled ?? true) ? ' disabled' : ''}`} key={folder.id}><input type="checkbox" checked={folder.enabled ?? true} onChange={() => toggleFolderEnabled(folder.id)} disabled={isRunning || folder.state === 'fertig'} style={{ cursor: isRunning || folder.state === 'fertig' ? 'not-allowed' : 'pointer', width: 18, height: 18 }} /><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}{folder.state !== 'fertig' && folder.excelFiles.length > 1 ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}><small>Manuelle Zuordnung vor Start:</small>{folder.occFiles.map((occFile) => <label key={occFile} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 1fr', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--muted)' }}>{occFile}</span><select value={(folder.selectedExcelByOcc ?? {})[occFile] ?? ''} onChange={(event) => setOccExcelMapping(folder.id, occFile, event.target.value)} disabled={isRunning} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Excel auswählen...</option>{folder.excelFiles.map((excelFile) => <option key={excelFile} value={excelFile}>{excelFile}</option>)}</select></label>)}</div> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
           </section>
 
           {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern · Laufzeit {formatDuration(elapsedSeconds)}</span></div><div style={{ marginTop: 8, color: 'var(--accent-dark)', fontSize: 12 }}><strong>Aktueller Schritt:</strong> {currentStep}</div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}

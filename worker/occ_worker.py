@@ -371,6 +371,11 @@ class Worker:
             item_id = item.get("id", str(index))
             try:
                 self.check_cancelled()
+                if not item.get("enabled", True):
+                    self.emit("item_skipped", itemId=item_id, reason="Ordner wurde vor Verarbeitung deaktiviert")
+                    skipped_count += 1
+                    self.skipped.append({"itemId": str(item_id), "reason": "Ordner wurde vor Verarbeitung deaktiviert"})
+                    continue
                 if item.get("mappingStatus") != "eindeutig":
                     self.emit("item_skipped", itemId=item_id, reason="Zuordnung vor Start nicht eindeutig")
                     skipped_count += 1
