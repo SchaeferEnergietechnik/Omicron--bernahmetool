@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "id": "station-nord",
+      "mappingStatus": "eindeutig",
+      "occPaths": [
+        "C:\\Omicron-Arbeitsordner\\Station Nord\\Prüfung.occ"
+      ],
+      "excelPath": "C:\\Omicron-Arbeitsordner\\Station Nord\\Prüfdaten.xlsm"
+    }
+  ]
+}

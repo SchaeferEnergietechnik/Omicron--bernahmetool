@@ -1,2 +1,75 @@
-# Omicron--bernahmetool
-Omicron-Übernahmetool
+# Omicron Übernahmetool
+
+Lokales Werkzeug, das Ordnerbäume nach Omicron-Prüfdateien (`*.occ`) durchsucht, die Messdaten exportiert und in die jeweils zugehörige Excel-Datei im selben Arbeitsbereich übernimmt.
+
+## Zielbild
+
+Die Anwendung soll einen frei wählbaren Startordner einschließlich aller Unterordner prüfen. Vor der Verarbeitung zeigt sie die gefundenen Prüfdateien und ihre vorgesehenen Excel-Ziele an. Der Benutzer kann mehrdeutige Zuordnungen kontrollieren und den laufenden Vorgang jederzeit kontrolliert abbrechen.
+
+Die ausführliche Beschreibung liegt unter:
+
+- [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md)
+- [Produktvision](docs/VISION.md)
+- [Fachlicher Ablauf](docs/WORKFLOW.md)
+- [Daten und Integrationen](docs/DATA_AND_INTEGRATIONS.md)
+- [Anforderungen](docs/REQUIREMENTS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Entscheidungen und offene Punkte](docs/DECISIONS.md)
+- [Analyse des bestehenden Python-Programms](docs/LEGACY_ANALYSIS.md)
+- [Analyse der Terminexcel](docs/TERMINEXCEL_ANALYSIS.md)
+- [VBA-Anpassung für V19m](docs/V19M_VBA_MIGRATION.md)
+
+## Aktueller Stand
+
+Die fachliche und technische Voranalyse ist abgeschlossen. Vorhanden sind ein erster React-Prototyp, die Analyse der bestehenden Windows-Automation und Beispieldateien sowie eine vorbereitete VBA-Ergänzung für V19m. Die Implementierung des produktiven Windows-Tools steht noch aus. Der genaue Übergabestand und die Reihenfolge für die spätere Fortsetzung stehen unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
+
+## Windows-Desktopversion
+
+Die produktive Oberfläche läuft als Electron-Desktopprogramm. Sie verwendet native
+Windows-Ordnerdialoge und startet den Python-Worker als separaten Prozess. Für die
+sichtbare Omicron- und Excel-Automatisierung wird Windows mit installiertem Omicron
+Control Center, Excel und Python 3.10 oder neuer benötigt.
+
+```powershell
+npm install
+npm run desktop
+```
+
+Für den Worker müssen die Python-Abhängigkeiten installiert sein:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r worker\requirements.txt
+```
+
+Die Desktop-App kopiert Cloud-Fundordner zunächst ausschließlich lesend in den
+lokalen Arbeitsordner. Vor der echten Verarbeitung müssen die angezeigten
+Zuordnungen geprüft werden. Während Omicron sichtbar bedient wird, darf die aktive
+Windows-Sitzung nicht anderweitig verwendet werden.
+
+## Entwicklung
+
+Voraussetzung: Node.js 20 oder neuer.
+
+```bash
+npm install
+npm run dev
+```
+
+Die Anwendung ist anschließend standardmäßig unter `http://localhost:5173` erreichbar.
+
+## Qualitätssicherung
+
+```bash
+npm run lint
+npm run build
+```
+
+## Technische Basis
+
+- React 19
+- TypeScript
+- Vite
+- ESLint
+- Lucide React
