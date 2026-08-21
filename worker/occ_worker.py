@@ -360,6 +360,10 @@ class Worker:
         items = self.job.get("items", [])
         self.run_started_monotonic = time.monotonic()
         self.emit("run_started", itemCount=len(items))
+        
+        # Sicherheit: Mashup zu Anfang beenden (falls noch aktiv)
+        self.terminate_mashup_loader()
+        
         succeeded_count = 0
         failed_count = 0
         skipped_count = 0
@@ -381,13 +385,16 @@ class Worker:
                 self.emit("item_started", itemId=item_id, index=index, total=len(items))
 
                 # Gewünschte Reihenfolge pro Ordner:
-                # je Excel-Gruppe: zugehörige OCC exportieren -> Excel-Bearbeitung
+                # 1. Mashup beenden vor OCC-Export
+                # 2. Alle OCCs der Excel-Gruppe exportieren
+                # 3. Excel öffnen, Daten importieren, Makros ausführen
+                # 4. Mashup beenden nach Excel-Import (vor nächster Gruppe)
                 for excel_path, occ_paths in excel_groups:
                     if not occ_paths or not excel_path.is_file():
                         raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {excel_path}")
 
+                    self.terminate_mashup_loader()
                     for occ_path in occ_paths:
-                        self.terminate_mashup_loader()
                         self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
                         self.export_occ(occ_path)
                         self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
@@ -395,6 +402,9 @@ class Worker:
                     self.emit("excel_started", itemId=item_id, excelPath=str(excel_path))
                     self.refresh_excel(excel_path)
                     self.emit("excel_completed", itemId=item_id, excelPath=str(excel_path))
+                    
+                    self.terminate_mashup_loader()
+
                 self.emit("item_completed", itemId=item_id)
                 succeeded_count += 1
             except CancellationRequested:
