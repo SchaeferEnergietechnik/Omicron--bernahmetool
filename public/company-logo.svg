@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Schafer Energietechnik Logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c7a60" />
+      <stop offset="100%" stop-color="#145f9f" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="20" fill="url(#bg)" />
+  <path d="M28 78c9-23 20-34 36-34 11 0 18 4 28 14" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+  <circle cx="89" cy="58" r="8" fill="#ffd36f" />
+  <path d="M23 95h82" stroke="#ffffff" stroke-width="7" stroke-linecap="round" />
+</svg>

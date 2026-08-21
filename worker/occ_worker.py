@@ -45,6 +45,7 @@ class Worker:
         self.run_started_monotonic: float | None = None
         self.failures: list[dict[str, str]] = []
         self.skipped: list[dict[str, str]] = []
+        self.skip_section_macro = bool(job.get("skipSectionMacro", False))
 
     def emit(self, event: str, **payload: Any) -> None:
         print(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **payload}, ensure_ascii=False), flush=True)
@@ -379,15 +380,22 @@ class Worker:
             self.wait(5)
             workbook.Worksheets(EXCEL_SHEET).Activate()
             self.run_macro(excel, workbook.Name, MACRO_PROTOCOL_NO)
-            last_error: Exception | None = None
-            for macro_name in MACRO_TOGGLE_SECTIONS_CANDIDATES:
-                try:
-                    self.run_macro(excel, workbook.Name, macro_name)
-                    break
-                except Exception as error:
-                    last_error = error
+            if self.skip_section_macro:
+                self.emit(
+                    "excel_macro_skipped",
+                    macroCandidates=MACRO_TOGGLE_SECTIONS_CANDIDATES,
+                    reason="Per Benutzeroption übersprungen",
+                )
             else:
-                raise RuntimeError(f"Bereichsmakro nicht verfügbar: {last_error}")
+                last_error: Exception | None = None
+                for macro_name in MACRO_TOGGLE_SECTIONS_CANDIDATES:
+                    try:
+                        self.run_macro(excel, workbook.Name, macro_name)
+                        break
+                    except Exception as error:
+                        last_error = error
+                else:
+                    raise RuntimeError(f"Bereichsmakro nicht verfügbar: {last_error}")
             self.run_macro(excel, workbook.Name, MACRO_HIDE_EMPTY_ROWS)
             self.check_cancelled()
             project_title = self.resolve_project_title(workbook, excel_path)

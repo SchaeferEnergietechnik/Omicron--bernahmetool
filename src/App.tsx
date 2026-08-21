@@ -54,6 +54,9 @@ type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
 }
 
+const COMPANY_NAME = 'Schäfer Energietechnik'
+const COMPANY_ADDRESS = 'Firmenadresse ergänzen'
+
 function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
   if (excelFiles.length !== 1) return {}
   const excel = excelFiles[0]
@@ -109,8 +112,9 @@ function App() {
   const [localHandle, setLocalHandle] = useState<DirectoryHandle | null>(null)
   const [folders, setFolders] = useState<WorkFolder[]>([])
   const [isScanning, setIsScanning] = useState(false)
-  const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um den Testlauf vorzubereiten.')
+  const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um die Verarbeitung vorzubereiten.')
   const [isRunning, setIsRunning] = useState(false)
+  const [skipSectionMacro, setSkipSectionMacro] = useState(() => localStorage.getItem('omicron-skip-section-macro') === '1')
   const [progress, setProgress] = useState({ completed: 0, total: 0, current: '', detail: '' })
   const [currentStep, setCurrentStep] = useState('Vorbereitung')
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
@@ -344,7 +348,7 @@ function App() {
     const readyFolders = runtimeFolders.filter((folder) => folder.state === 'bereit')
     const processingFolders = readyFolders.filter((folder) => folder.enabled ?? true)
     if (!processingFolders.length) {
-      setNotice('Es gibt keine konfliktfreien Fundordner für den Testlauf.')
+      setNotice('Es gibt keine konfliktfreien Fundordner für die Verarbeitung.')
       return
     }
     if (!window.desktopApi) {
@@ -352,7 +356,7 @@ function App() {
         const evaluated = evaluateFolderState(folder)
         return (folder.enabled ?? true) && evaluated === 'bereit' ? { ...folder, state: 'fertig' } : { ...folder, state: evaluated }
       }))
-      setNotice(`${processingFolders.length} Fundordner wurden im Browser-Testlauf simuliert.`)
+      setNotice(`${processingFolders.length} Fundordner wurden im Browsermodus simuliert.`)
       return
     }
 
@@ -397,7 +401,7 @@ function App() {
     try {
       await window.desktopApi.prepareLocalFolders(copyPlan)
       setProgress((current) => ({ ...current, detail: 'Worker wird gestartet' }))
-      await window.desktopApi.runWorker({ items, reportPath }, '')
+      await window.desktopApi.runWorker({ items, reportPath, skipSectionMacro }, '')
     } catch (error) {
       setNotice(`Worker konnte nicht gestartet werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
@@ -416,6 +420,11 @@ function App() {
     setNotice('Ansicht zurückgesetzt. Gespeicherte Ordnernamen bleiben erhalten.')
   }
 
+  function toggleSkipSectionMacro(value: boolean) {
+    setSkipSectionMacro(value)
+    localStorage.setItem('omicron-skip-section-macro', value ? '1' : '0')
+  }
+
   const readyCount = folders.filter((folder) => folder.state === 'bereit').length
   const completeCount = folders.filter((folder) => folder.state === 'fertig').length
   const conflictCount = folders.filter((folder) => folder.state === 'konflikt').length
@@ -428,10 +437,11 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#main" aria-label="Omicron Übernahmetool">
-          <span className="brand-mark">O</span>
+          <img className="brand-logo" src="/company-logo.svg" alt="Firmenlogo" />
           <span><strong>Omicron</strong><small>Übernahmetool</small></span>
         </a>
-        <div className="test-mode"><CircleAlert size={16} /> {window.desktopApi ? 'Windows-Desktopversion' : 'Browser-Testversion'}</div>
+        <div className="company-meta"><strong>{COMPANY_NAME}</strong><small>{COMPANY_ADDRESS}</small></div>
+        <div className="test-mode"><CircleAlert size={16} /> {window.desktopApi ? 'Windows-Desktopbetrieb' : 'Browservorschau'}</div>
       </header>
 
       <main id="main" className="workspace">
@@ -447,7 +457,7 @@ function App() {
 
         <section className="content">
           <div className="page-heading">
-            <div><span className="eyebrow">Erste Testversion</span><h1>Prüfungsordner bereitstellen</h1><p>OCC-Fundordner aus der Cloud prüfen und erst bei Start lokal bereitstellen.</p></div>
+            <div><span className="eyebrow">Produktivablauf</span><h1>Prüfungsordner bereitstellen</h1><p>OCC-Fundordner aus der Cloud prüfen und erst bei Start lokal bereitstellen.</p></div>
             <button className="icon-button" type="button" title="Ansicht zurücksetzen" onClick={reset}><RotateCcw size={18} /><span className="sr-only">Ansicht zurücksetzen</span></button>
           </div>
 
@@ -457,6 +467,15 @@ function App() {
               <div className="folder-choice"><Cloud size={21} /><div><span>Cloud-Quellordner</span><strong>{cloudPath || 'Noch nicht ausgewählt'}</strong></div><button type="button" onClick={() => chooseDirectory('cloud')}>Auswählen</button></div>
               <div className="folder-choice"><HardDrive size={21} /><div><span>Lokaler Arbeitsordner</span><strong>{localPath || 'Noch nicht ausgewählt'}</strong></div><button type="button" onClick={() => chooseDirectory('local')}>Auswählen</button></div>
             </div>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14, color: 'var(--muted)', fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={skipSectionMacro}
+                onChange={(event) => toggleSkipSectionMacro(event.target.checked)}
+                disabled={isRunning}
+              />
+              Bereichsmakro überspringen (BereicheEinOderAusblenden_Start)
+            </label>
             <div className="action-row"><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche...' : 'Cloud-Ordner prüfen'}</button></div>
           </section>
 
