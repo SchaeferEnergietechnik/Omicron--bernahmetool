@@ -33,7 +33,7 @@ type DesktopApi = {
   importCloud: (source: string, destination: string) => Promise<Array<WorkFolder & { sourcePath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
-  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string }) => void) => () => void
+  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; occPath?: string; excelPath?: string }) => void) => () => void
 }
 
 declare global {
@@ -134,10 +134,25 @@ function App() {
   const [isScanning, setIsScanning] = useState(false)
   const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um den Testlauf vorzubereiten.')
   const [isRunning, setIsRunning] = useState(false)
+  const [progress, setProgress] = useState({ completed: 0, total: 0, current: '', detail: '' })
 
   useEffect(() => window.desktopApi?.onWorkerEvent((event) => {
-    if (event.event === 'item_completed') setFolders((current) => current.map((folder) => folder.id === event.itemId ? { ...folder, state: 'fertig' } : folder))
-    if (event.event === 'item_failed') setNotice(`Verarbeitung fehlgeschlagen: ${event.message ?? 'Unbekannter Fehler'}`)
+    if (event.event === 'run_started') setProgress({ completed: 0, total: event.total ?? 0, current: '', detail: 'Vorbereitung' })
+    if (event.event === 'item_started') {
+      setProgress((current) => ({ ...current, current: event.itemId ?? 'Fundordner', detail: `Eintrag ${event.index ?? 1} von ${event.total ?? current.total}` }))
+      setNotice('Verarbeitung läuft. Bitte Omicron und Excel nicht bedienen.')
+    }
+    if (event.event === 'occ_started') setProgress((current) => ({ ...current, detail: `Omicron-Export: ${event.occPath ?? 'OCC-Datei'}` }))
+    if (event.event === 'excel_started') setProgress((current) => ({ ...current, detail: `Excel-Verarbeitung: ${event.excelPath ?? 'Arbeitsmappe'}` }))
+    if (event.event === 'item_completed') {
+      setFolders((current) => current.map((folder) => folder.id === event.itemId ? { ...folder, state: 'fertig' } : folder))
+      setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag erfolgreich abgeschlossen' }))
+    }
+    if (event.event === 'item_failed') {
+      setNotice(`Verarbeitung fehlgeschlagen: ${event.message ?? 'Unbekannter Fehler'}`)
+      setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag fehlgeschlagen' }))
+    }
+    if (event.event === 'worker_error') setNotice(`Python-Worker-Fehler: ${event.message ?? 'Unbekannter Fehler'}`)
     if (event.event === 'run_cancelled') setNotice('Verarbeitung kontrolliert abgebrochen.')
     if (event.event === 'run_completed') setNotice('Verarbeitung abgeschlossen.')
   }), [])
@@ -179,7 +194,11 @@ function App() {
   }
 
   async function importCloudFolders() {
-    if (!cloudHandle || !localHandle) {
+    if (!window.desktopApi && (!cloudHandle || !localHandle)) {
+      setNotice('Bitte wählen Sie zuerst beide Ordner über die Ordnerauswahl aus.')
+      return
+    }
+    if (window.desktopApi && (!cloudPath || !localPath)) {
       setNotice('Bitte wählen Sie zuerst beide Ordner über die Ordnerauswahl aus.')
       return
     }
@@ -189,6 +208,10 @@ function App() {
         const imported = await window.desktopApi.importCloud(cloudPath, localPath)
         setFolders(imported.map((folder) => ({ ...folder, id: folder.path })))
         setNotice(`${imported.length} OCC-Fundordner wurden lokal bereitgestellt.`)
+        return
+      }
+      if (!cloudHandle || !localHandle) {
+        setNotice('Bitte wählen Sie zuerst beide Ordner über die Ordnerauswahl aus.')
         return
       }
       const discovered = await discoverWorkFolders(cloudHandle)
@@ -236,6 +259,7 @@ function App() {
       excelPath: `${folder.localPath}\\${folder.excelFiles[0]}`,
     }))
     setIsRunning(true)
+    setProgress({ completed: 0, total: readyFolders.length, current: '', detail: 'Worker wird gestartet' })
     setNotice('Sichtbare Omicron-Automatisierung gestartet. Bitte den Arbeitsplatz nicht bedienen.')
     try {
       await window.desktopApi.runWorker({ items }, '')
@@ -259,6 +283,7 @@ function App() {
   const readyCount = folders.filter((folder) => folder.state === 'bereit').length
   const completeCount = folders.filter((folder) => folder.state === 'fertig').length
   const conflictCount = folders.filter((folder) => folder.state === 'konflikt').length
+  const progressPercent = progress.total ? Math.round((progress.completed / progress.total) * 100) : 0
 
   return (
     <div className="app-shell">
@@ -301,6 +326,7 @@ function App() {
             {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}`} key={folder.id}><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
           </section>
 
+          {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern</span></div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}
           <div className="action-bar"><div className="status-message" role="status"><CircleAlert size={17} /><span>{notice}</span></div>{isRunning ? <button className="secondary-button" type="button" onClick={cancelRun}><TriangleAlert size={18} />Abbruch anfordern</button> : <button className="primary-button" type="button" onClick={runTest} disabled={!readyCount}><Play size={18} />Verarbeitung starten</button>}</div>
         </section>
       </main>

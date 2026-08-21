@@ -91,6 +91,7 @@ ipcMain.handle('run-worker', async (event, { job, workerPath, pythonPath }) => {
     }
   })
   workerProcess.stderr.on('data', (data) => event.sender.send('worker-event', { event: 'worker_error', message: data.toString() }))
+  workerProcess.on('error', (error) => event.sender.send('worker-event', { event: 'worker_error', message: error.message }))
   return new Promise((resolve) => workerProcess.on('close', (code) => {
     workerProcess = undefined
     resolve(code ?? 1)
