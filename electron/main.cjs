@@ -26,16 +26,27 @@ function createWindow() {
 async function findFolders(root) {
   const result = []
   async function visit(current, relative) {
-    const entries = await fs.readdir(current, { withFileTypes: true })
+    let entries
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true })
+    } catch (error) {
+      // Einzelne problematische Pfade (z. B. ENAMETOOLONG im Netzlaufwerk)
+      // sollen den gesamten Cloud-Import nicht abbrechen.
+      console.warn(`[import-cloud] Skip unreadable path: ${current} (${error.message})`)
+      return
+    }
     const files = entries.filter((entry) => entry.isFile())
     const occFiles = files.filter((entry) => entry.name.toLowerCase().endsWith('.occ')).map((entry) => entry.name)
     const excelFiles = files
       .filter((entry) => /\.xls[xm]$/i.test(entry.name) && !entry.name.startsWith('~$') && !entry.name.toLowerCase().includes('wartung'))
       .map((entry) => entry.name)
     if (occFiles.length) result.push({ path: relative, sourcePath: current, occFiles, excelFiles })
-    await Promise.all(entries
-      .filter((entry) => entry.isDirectory() && entry.name !== 'Protokollentwürfe')
-      .map((entry) => visit(path.join(current, entry.name), path.join(relative, entry.name))))
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'Protokollentwürfe') continue
+      const nextCurrent = path.join(current, entry.name)
+      const nextRelative = path.join(relative, entry.name)
+      await visit(nextCurrent, nextRelative)
+    }
   }
   await visit(root, path.basename(root))
   return result
