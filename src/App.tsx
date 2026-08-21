@@ -26,6 +26,7 @@ type WorkFolder = {
   state: FolderState
   localPath?: string
   message?: string
+  selectedExcelByOcc?: Record<string, string>
 }
 
 type DesktopApi = {
@@ -33,7 +34,7 @@ type DesktopApi = {
   importCloud: (source: string, destination: string) => Promise<Array<WorkFolder & { sourcePath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
-  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number }) => void) => () => void
+  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string }) => void) => () => void
 }
 
 declare global {
@@ -57,6 +58,10 @@ const demoFolders: WorkFolder[] = [
     occFiles: ['V24_NAP_V2_Bensheim.occ', 'V9_EZE_mit_Anregung_Bensheim.occ'],
     excelFiles: ['V19m_Übergeordneter_Entkupplungsschutz.xlsm'],
     state: 'bereit',
+    selectedExcelByOcc: {
+      'V24_NAP_V2_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
+      'V9_EZE_mit_Anregung_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
+    },
   },
   {
     id: 'gross-gerau',
@@ -64,8 +69,30 @@ const demoFolders: WorkFolder[] = [
     occFiles: ['Schutzprüfung_Station_West.occ'],
     excelFiles: ['Prüfdaten_Station_West.xlsm'],
     state: 'bereit',
+    selectedExcelByOcc: {
+      'Schutzprüfung_Station_West.occ': 'Prüfdaten_Station_West.xlsm',
+    },
   },
 ]
+
+function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
+  if (excelFiles.length !== 1) return {}
+  const excel = excelFiles[0]
+  return Object.fromEntries(occFiles.map((occ) => [occ, excel]))
+}
+
+function evaluateFolderState(folder: WorkFolder): FolderState {
+  if (folder.state === 'fertig') return 'fertig'
+  if (folder.excelFiles.length === 0) return 'konflikt'
+  if (folder.excelFiles.length === 1) return 'bereit'
+
+  const mapping = folder.selectedExcelByOcc ?? {}
+  const allAssigned = folder.occFiles.every((occ) => {
+    const selected = mapping[occ]
+    return Boolean(selected) && folder.excelFiles.includes(selected)
+  })
+  return allAssigned ? 'bereit' : 'konflikt'
+}
 
 async function entriesOf(directory: DirectoryHandle) {
   const entries: FileSystemHandle[] = []
@@ -173,6 +200,10 @@ function App() {
       setCurrentStep('Excel-Bearbeitung')
       setProgress((current) => ({ ...current, detail: `Excel-Verarbeitung: ${event.excelPath ?? 'Arbeitsmappe'}` }))
     }
+    if (event.event === 'excel_completed') {
+      setCurrentStep('Excel-Bearbeitung')
+      setProgress((current) => ({ ...current, detail: `Excel abgeschlossen: ${event.excelPath ?? 'Arbeitsmappe'}` }))
+    }
     if (event.event === 'mashup_terminated') {
       setCurrentStep('Mashup beenden')
       setProgress((current) => ({ ...current, detail: 'Vorbereitung: Mashup-Loader beendet' }))
@@ -203,13 +234,47 @@ function App() {
       setNotice(`Verarbeitung kontrolliert abgebrochen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
       setRunStartedAt(null)
     }
+    if (event.event === 'run_failed') {
+      setCurrentStep('Fehlerbehandlung')
+      if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
+      setNotice(`Verarbeitung gestoppt: ${event.message ?? 'Unbekannter Fehler'}. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      setRunStartedAt(null)
+    }
+    if (event.event === 'run_report_written') {
+      setProgress((current) => ({ ...current, detail: `Fehlerbericht geschrieben: ${event.reportPath ?? 'Pfad unbekannt'}` }))
+    }
+    if (event.event === 'run_report_failed') {
+      setProgress((current) => ({ ...current, detail: 'Fehlerbericht konnte nicht geschrieben werden' }))
+      setNotice(`Hinweis: Fehlerbericht konnte nicht geschrieben werden: ${event.message ?? 'Unbekannter Fehler'}`)
+    }
     if (event.event === 'run_completed') {
       setCurrentStep('Fertig')
       if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
-      setNotice(`Verarbeitung abgeschlossen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      const succeeded = event.succeededCount ?? 0
+      const failed = event.failedCount ?? 0
+      const skipped = event.skippedCount ?? 0
+      const reportInfo = event.reportPath ? ` Fehlerbericht: ${event.reportPath}.` : ''
+      setNotice(`Verarbeitung abgeschlossen. Erfolg: ${succeeded}, Fehler: ${failed}, Übersprungen: ${skipped}. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.${reportInfo}`)
       setRunStartedAt(null)
     }
   }), [])
+
+  function setOccExcelMapping(folderId: string, occFile: string, excelFile: string) {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId || folder.state === 'fertig') return folder
+      const nextMapping = { ...(folder.selectedExcelByOcc ?? {}) }
+      if (excelFile) nextMapping[occFile] = excelFile
+      else delete nextMapping[occFile]
+      const updated: WorkFolder = {
+        ...folder,
+        selectedExcelByOcc: nextMapping,
+      }
+      return {
+        ...updated,
+        state: evaluateFolderState(updated),
+      }
+    }))
+  }
 
   async function chooseDirectory(kind: 'cloud' | 'local') {
     if (window.desktopApi) {
@@ -260,7 +325,11 @@ function App() {
     try {
       if (window.desktopApi) {
         const imported = await window.desktopApi.importCloud(cloudPath, localPath)
-        setFolders(imported.map((folder) => ({ ...folder, id: folder.path })))
+        setFolders(imported.map((folder) => {
+          const selectedExcelByOcc = initSelectedExcelByOcc(folder.occFiles, folder.excelFiles)
+          const enriched: WorkFolder = { ...folder, id: folder.path, selectedExcelByOcc }
+          return { ...enriched, state: evaluateFolderState(enriched) }
+        }))
         setNotice(`${imported.length} OCC-Fundordner wurden lokal bereitgestellt.`)
         return
       }
@@ -273,11 +342,13 @@ function App() {
       for (const folder of discovered) {
         const target = await createTargetFolder(localHandle, folder.path)
         if (!target) {
-          imported.push({ ...folder, state: 'konflikt' })
+          imported.push({ ...folder, state: 'konflikt', selectedExcelByOcc: {} })
           continue
         }
         await copyFolder(folder.handle, target)
-        imported.push(folder)
+        const selectedExcelByOcc = initSelectedExcelByOcc(folder.occFiles, folder.excelFiles)
+        const enriched: WorkFolder = { ...folder, selectedExcelByOcc }
+        imported.push({ ...enriched, state: evaluateFolderState(enriched) })
       }
       setFolders(imported)
       setNotice(`${imported.length} OCC-Fundordner wurden geprüft. Die Cloud-Quelle wurde nur gelesen.`)
@@ -296,6 +367,12 @@ function App() {
   }
 
   async function runTest() {
+    const conflictFolders = folders.filter((folder) => folder.state === 'konflikt')
+    if (conflictFolders.length) {
+      setNotice(`Es gibt ${conflictFolders.length} Ordner mit ungeklärter Zuordnung. Bitte vor Export klären.`)
+      return
+    }
+
     const readyFolders = folders.filter((folder) => folder.state === 'bereit')
     if (!readyFolders.length) {
       setNotice('Es gibt keine konfliktfreien Fundordner für den Testlauf.')
@@ -307,11 +384,24 @@ function App() {
       return
     }
     const items = readyFolders.map((folder) => ({
-      id: folder.id,
-      mappingStatus: 'eindeutig',
-      occPaths: folder.occFiles.map((file) => `${folder.localPath}\\${file}`),
-      excelPath: `${folder.localPath}\\${folder.excelFiles[0]}`,
+      ...(folder.excelFiles.length === 1
+        ? {
+            id: folder.id,
+            mappingStatus: 'eindeutig',
+            occPaths: folder.occFiles.map((file) => `${folder.localPath}\\${file}`),
+            excelPath: `${folder.localPath}\\${folder.excelFiles[0]}`,
+          }
+        : {
+            id: folder.id,
+            mappingStatus: 'eindeutig',
+            mappings: folder.occFiles.map((occFile) => ({
+              occPath: `${folder.localPath}\\${occFile}`,
+              excelPath: `${folder.localPath}\\${(folder.selectedExcelByOcc ?? {})[occFile]}`,
+            })),
+          }),
     }))
+    const timestamp = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+$/, '')
+    const reportPath = `${localPath}\\Protokollentwuerfe\\Fehlerbericht_${timestamp}.json`
     setIsRunning(true)
     setRunStartedAt(Date.now())
     setElapsedSeconds(0)
@@ -319,7 +409,7 @@ function App() {
     setProgress({ completed: 0, total: readyFolders.length, current: '', detail: 'Worker wird gestartet' })
     setNotice('Sichtbare Omicron-Automatisierung gestartet. Bitte den Arbeitsplatz nicht bedienen.')
     try {
-      await window.desktopApi.runWorker({ items }, '')
+      await window.desktopApi.runWorker({ items, reportPath }, '')
     } catch (error) {
       setNotice(`Worker konnte nicht gestartet werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
@@ -381,7 +471,7 @@ function App() {
 
           <section className="preview" aria-labelledby="preview-heading">
             <div className="preview-heading"><div><h2 id="preview-heading">Lokale Vorschau</h2><p>{folders.length ? `${folders.length} Fundordner im lokalen Arbeitsbereich` : 'Noch keine Fundordner bereitgestellt'}</p></div><div className="counts"><span>{readyCount} bereit</span><span>{conflictCount} Konflikte</span><span>{completeCount} erledigt</span></div></div>
-            {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}`} key={folder.id}><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
+            {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}`} key={folder.id}><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}{folder.state !== 'fertig' && folder.excelFiles.length > 1 ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}><small>Manuelle Zuordnung vor Start:</small>{folder.occFiles.map((occFile) => <label key={occFile} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 1fr', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--muted)' }}>{occFile}</span><select value={(folder.selectedExcelByOcc ?? {})[occFile] ?? ''} onChange={(event) => setOccExcelMapping(folder.id, occFile, event.target.value)} disabled={isRunning} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Excel auswählen...</option>{folder.excelFiles.map((excelFile) => <option key={excelFile} value={excelFile}>{excelFile}</option>)}</select></label>)}</div> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
           </section>
 
           {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern · Laufzeit {formatDuration(elapsedSeconds)}</span></div><div style={{ marginTop: 8, color: 'var(--accent-dark)', fontSize: 12 }}><strong>Aktueller Schritt:</strong> {currentStep}</div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}

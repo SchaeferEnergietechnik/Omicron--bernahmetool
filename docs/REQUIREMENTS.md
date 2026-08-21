@@ -51,6 +51,10 @@
 | F-045 | Enthält ein Fundordner fehlgeschlagene, abgebrochene, ausgeschlossene oder nicht gestartete Verarbeitungseinheiten, bleibt er außerhalb von `Protokollentwürfe` im lokalen Arbeitsordner. | Muss |
 | F-046 | Der Unterordner `Protokollentwürfe` wird bei Cloud-Kopie und lokaler Suche ausgeschlossen, damit erledigte Ordner nicht erneut verarbeitet werden. | Muss |
 | F-047 | Besteht im Ziel bereits ein gleichnamiger Ordner unter `Protokollentwürfe`, wird der Fundordner nicht automatisch überschrieben; der Konflikt wird protokolliert und verlangt eine Benutzerentscheidung. | Muss |
+| F-048 | Bei mehreren Excel-Dateien im Fundordner muss die GUI vor dem Start eine manuelle Zuordnung OCC->Excel pro OCC-Datei ermöglichen. | Muss |
+| F-049 | Der Verarbeitungsstart ist blockiert, solange ungeklärte OCC->Excel-Zuordnungen vorhanden sind. | Muss |
+| F-050 | Während der Verarbeitung zeigt die GUI den aktuellen Schritt und die Gesamtlaufzeit an. | Muss |
+| F-051 | Der Nachtlauf setzt die Verarbeitung trotz Einzelfehlern fort und erstellt am Ende einen Fehlerbericht mit Erfolgs-, Fehler- und Skip-Zählung. | Muss |
 
 ## Nichtfunktionale Anforderungen
 
@@ -65,6 +69,7 @@
 | N-007 | Die Anwendung muss auf dem vorgesehenen Windows-Arbeitsplatz lauffähig sein. |
 | N-008 | Die sichtbare Automatisierung darf nicht den Eindruck erwecken, sie könne störungsfrei parallel zur normalen Bedienung derselben Windows-Sitzung laufen. |
 | N-009 | Automatisierung und Bedienoberfläche sollen in getrennten Prozessen laufen, damit ein Fehler der Automatisierung die Steuerung nicht unmittelbar beendet. |
+| N-010 | Fehlerberichte müssen maschinenlesbar und dauerhaft speicherbar sein, damit unbeaufsichtigte Nachtläufe nachträglich ausgewertet werden können. |
 
 ## Abnahmeszenarien
 
@@ -131,3 +136,11 @@ Alle Verarbeitungseinheiten eines lokalen Fundordners wurden erfolgreich in Exce
 ### A-016: Unvollständigen Fundordner liegen lassen
 
 Mindestens eine Verarbeitungseinheit eines lokalen Fundordners ist fehlgeschlagen, abgebrochen, ausgeschlossen oder nicht gestartet. Der Fundordner wird nicht nach `Protokollentwürfe` verschoben und bleibt zur erkennbaren Nachbearbeitung im lokalen Arbeitsordner.
+
+### A-017: Manuelle Zuordnung vor Start
+
+Ein Fundordner enthält mehrere `*.occ`- und mehrere Excel-Dateien. Die GUI verlangt vor dem Start eine manuelle Zuordnung OCC->Excel pro OCC-Datei. Der Startbutton bleibt deaktiviert oder führt zu einer blockierenden Hinweismeldung, bis alle OCC-Dateien eindeutig zugeordnet sind.
+
+### A-018: Unbeaufsichtigter Nachtlauf mit Fehlerbericht
+
+Während eines unbeaufsichtigten Laufs tritt bei einem Eintrag ein Fehler auf, während nachfolgende Einträge verarbeitbar sind. Das Tool setzt den Lauf fort, zeigt am Ende die Summen für Erfolg, Fehler und übersprungen an und schreibt einen Fehlerbericht als JSON-Datei mit Einzeldetails.

@@ -41,6 +41,8 @@ class Worker:
         self.job = job
         self.cancel_file = cancel_file
         self.run_started_monotonic: float | None = None
+        self.failures: list[dict[str, str]] = []
+        self.skipped: list[dict[str, str]] = []
 
     def emit(self, event: str, **payload: Any) -> None:
         print(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **payload}, ensure_ascii=False), flush=True)
@@ -145,6 +147,21 @@ class Worker:
         except Exception:
             return
 
+        # Closing an OCC without changes can still show a save question. Never wait
+        # for a user: discard instead, otherwise record a later file failure.
+        try:
+            for handle in find_windows(title_re=WINDOW_TITLE_RE):
+                dialog = Application(backend="uia").connect(handle=handle).window(handle=handle)
+                text = " ".join(item.window_text() for item in dialog.descendants() if item.window_text()).lower()
+                if "speichern" in text:
+                    for title in ("Nein", "NEIN", "No"):
+                        button = dialog.child_window(title=title, control_type="Button")
+                        if button.exists(timeout=1):
+                            button.click_input()
+                            return
+        except Exception:
+            return
+
     def terminate_mashup_loader(self) -> None:
         """Stoppt den Power-Query-Mashup-Loader vor einem neuen Verarbeitungslauf."""
         try:
@@ -161,21 +178,6 @@ class Worker:
                 self.emit("mashup_not_running")
         except Exception as error:
             self.emit("mashup_termination_failed", message=str(error))
-
-        # Closing an OCC without changes can still show a save question. Never wait
-        # for a user: discard instead, otherwise record a later file failure.
-        try:
-            for handle in find_windows(title_re=WINDOW_TITLE_RE):
-                dialog = Application(backend="uia").connect(handle=handle).window(handle=handle)
-                text = " ".join(item.window_text() for item in dialog.descendants() if item.window_text()).lower()
-                if "speichern" in text:
-                    for title in ("Nein", "NEIN", "No"):
-                        button = dialog.child_window(title=title, control_type="Button")
-                        if button.exists(timeout=1):
-                            button.click_input()
-                            return
-        except Exception:
-            return
 
     def export_occ(self, occ_path: Path) -> None:
         if not occ_path.is_file():
@@ -198,6 +200,58 @@ class Worker:
         if self.run_started_monotonic is None:
             return 0
         return max(0, int(time.monotonic() - self.run_started_monotonic))
+
+    def write_report_if_needed(self, succeeded: int, failed: int, skipped: int) -> str | None:
+        report_path_value = self.job.get("reportPath")
+        if not report_path_value:
+            return None
+        report_path = Path(report_path_value)
+        payload = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "elapsedSeconds": self.elapsed_seconds(),
+            "summary": {
+                "succeeded": succeeded,
+                "failed": failed,
+                "skipped": skipped,
+            },
+            "failures": self.failures,
+            "skippedItems": self.skipped,
+        }
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(report_path)
+
+    def sort_occ_paths(self, occ_paths: list[Path]) -> list[Path]:
+        """Sortiert OCC-Dateien stabil: zuerst nicht-EZE (z. B. NAP), dann EZE."""
+        def sort_key(path: Path) -> tuple[int, str]:
+            name = path.name.lower()
+            is_eze = "eze" in name
+            return (1 if is_eze else 0, name)
+
+        return sorted(occ_paths, key=sort_key)
+
+    def resolve_excel_groups(self, item: dict[str, Any]) -> list[tuple[Path, list[Path]]]:
+        """Liefert stabile Gruppen: [(excel_path, [occ_paths...])]."""
+        mappings = item.get("mappings")
+        if mappings:
+            grouped: dict[Path, list[Path]] = {}
+            for mapping in mappings:
+                occ_value = mapping.get("occPath")
+                excel_value = mapping.get("excelPath")
+                if not occ_value or not excel_value:
+                    raise RuntimeError("Ungültige manuelle Zuordnung: OCC- oder Excel-Pfad fehlt")
+                excel_path = Path(excel_value)
+                occ_path = Path(occ_value)
+                grouped.setdefault(excel_path, []).append(occ_path)
+
+            groups: list[tuple[Path, list[Path]]] = []
+            for excel_path in sorted(grouped.keys(), key=lambda path: path.name.lower()):
+                groups.append((excel_path, self.sort_occ_paths(grouped[excel_path])))
+            return groups
+
+        occ_paths = self.sort_occ_paths([Path(path) for path in item.get("occPaths", [])])
+        excel_path = Path(item["excelPath"])
+        return [(excel_path, occ_paths)]
 
     def run_macro(self, excel, workbook_name: str, macro_name: str) -> None:
         excel.Application.Run(f"'{workbook_name}'!{macro_name}")
@@ -251,38 +305,69 @@ class Worker:
         items = self.job.get("items", [])
         self.run_started_monotonic = time.monotonic()
         self.emit("run_started", itemCount=len(items))
+        succeeded_count = 0
+        failed_count = 0
+        skipped_count = 0
         for index, item in enumerate(items, start=1):
             item_id = item.get("id", str(index))
             try:
                 self.check_cancelled()
                 if item.get("mappingStatus") != "eindeutig":
                     self.emit("item_skipped", itemId=item_id, reason="Zuordnung vor Start nicht eindeutig")
+                    skipped_count += 1
+                    self.skipped.append({"itemId": str(item_id), "reason": "Zuordnung vor Start nicht eindeutig"})
                     continue
-                occ_paths = [Path(path) for path in item.get("occPaths", [])]
-                excel_path = Path(item["excelPath"])
-                if not occ_paths or not excel_path.is_file():
-                    self.emit("item_skipped", itemId=item_id, reason="OCC- oder Excel-Datei fehlt")
+                excel_groups = self.resolve_excel_groups(item)
+                if not excel_groups:
+                    self.emit("item_skipped", itemId=item_id, reason="Keine OCC-/Excel-Zuordnung vorhanden")
+                    skipped_count += 1
+                    self.skipped.append({"itemId": str(item_id), "reason": "Keine OCC-/Excel-Zuordnung vorhanden"})
                     continue
                 self.emit("item_started", itemId=item_id, index=index, total=len(items))
 
-                # Gewünschte Reihenfolge pro Ordner/Eintrag:
-                # Mashup beenden -> OCC-Datenexport -> Excel-Bearbeitung
-                self.terminate_mashup_loader()
+                # Gewünschte Reihenfolge pro Ordner:
+                # je Excel-Gruppe: Mashup beenden -> zugehörige OCC exportieren -> Excel-Bearbeitung
+                for excel_path, occ_paths in excel_groups:
+                    if not occ_paths or not excel_path.is_file():
+                        raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {excel_path}")
 
-                for occ_path in occ_paths:
-                    self.emit("occ_started", itemId=item_id, occPath=str(occ_path))
-                    self.export_occ(occ_path)
-                    self.emit("occ_completed", itemId=item_id, occPath=str(occ_path))
-                self.emit("excel_started", itemId=item_id, excelPath=str(excel_path))
-                self.refresh_excel(excel_path)
+                    self.terminate_mashup_loader()
+                    for occ_path in occ_paths:
+                        self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
+                        self.export_occ(occ_path)
+                        self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
+
+                    self.emit("excel_started", itemId=item_id, excelPath=str(excel_path))
+                    self.refresh_excel(excel_path)
+                    self.emit("excel_completed", itemId=item_id, excelPath=str(excel_path))
                 self.emit("item_completed", itemId=item_id)
+                succeeded_count += 1
             except CancellationRequested:
                 self.emit("run_cancelled", itemId=item_id, elapsedSeconds=self.elapsed_seconds())
                 return 2
             except Exception as error:
                 self.emit("item_failed", itemId=item_id, message=str(error))
-        self.emit("run_completed", elapsedSeconds=self.elapsed_seconds())
-        return 0
+                failed_count += 1
+                self.failures.append({"itemId": str(item_id), "message": str(error)})
+
+        report_path = None
+        try:
+            if failed_count > 0 or skipped_count > 0:
+                report_path = self.write_report_if_needed(succeeded_count, failed_count, skipped_count)
+                if report_path:
+                    self.emit("run_report_written", reportPath=report_path)
+        except Exception as error:
+            self.emit("run_report_failed", message=str(error))
+
+        self.emit(
+            "run_completed",
+            elapsedSeconds=self.elapsed_seconds(),
+            succeededCount=succeeded_count,
+            failedCount=failed_count,
+            skippedCount=skipped_count,
+            reportPath=report_path,
+        )
+        return 0 if failed_count == 0 else 1
 
 
 def main() -> int:

@@ -16,9 +16,10 @@ Das Omicron Übernahmetool soll diesen Ablauf als lokale, nachvollziehbare Stape
 4. Die lokalen Kopien werden nach `*.occ`-Dateien und passenden Excel-Dateien durchsucht.
 5. Vor der Verarbeitung erscheint eine Vorschau der geplanten Zuordnungen.
 6. Eindeutige Fälle können gemeinsam verarbeitet werden.
-7. Mehrdeutige Fälle müssen sichtbar sein und dürfen nicht stillschweigend falsch zugeordnet werden.
-8. Der laufende Vorgang kann kontrolliert abgebrochen werden.
-9. Am Ende ist nachvollziehbar, was erfolgreich war, übersprungen wurde oder fehlgeschlagen ist.
+7. Mehrdeutige Fälle werden vor dem Start manuell als OCC->Excel in der GUI zugeordnet.
+8. Der laufende Vorgang zeigt aktuellen Schritt und Laufzeit.
+9. Der laufende Vorgang kann kontrolliert abgebrochen werden.
+10. Für unbeaufsichtigte Läufe arbeitet das Tool bei Einzelfehlern weiter und liefert am Ende einen Fehlerbericht.
 
 Die Zuordnung und Verarbeitung erfolgen ausschließlich im lokalen Arbeitsordner. Dateien der zweiten Station sind durch den Marker `EZE` im Dateinamen gekennzeichnet; Groß-/Kleinschreibung und Position des Markers spielen keine Rolle.
 
@@ -35,9 +36,11 @@ Das Tool ist fachlich brauchbar, wenn:
 - Cloud-Quellordner und lokaler Arbeitsordner nach einem Neustart wieder angeboten werden,
 - jede `*.occ`-Datei vor dem Schreiben einem sichtbaren Excel-Ziel zugeordnet ist,
 - unklare Zuordnungen eine Benutzerentscheidung verlangen,
+- ein Lauf nicht startet, solange erforderliche Zuordnungen fehlen,
 - keine Excel-Datei unbemerkt oder teilweise beschädigt wird,
 - ein Abbruch keine aktuell geschriebene Excel-Datei in einem inkonsistenten Zustand hinterlässt,
-- ein Abschlussprotokoll alle Einzelergebnisse enthält.
+- ein Abschlussprotokoll alle Einzelergebnisse enthält,
+- Nachtläufe einen maschinenlesbaren Fehlerbericht erzeugen.
 
 ## Nicht im ersten Zielumfang
 

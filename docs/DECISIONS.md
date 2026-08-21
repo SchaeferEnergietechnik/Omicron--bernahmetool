@@ -84,24 +84,25 @@ Nach manuellem Start durchsucht das Tool den in der GUI gespeicherten Cloud-Quel
 
 Sobald alle Verarbeitungseinheiten eines lokalen Fundordners erfolgreich abgeschlossen sind, verschiebt das Tool den vollständigen Fundordner nach `<lokaler Arbeitsordner>/Protokollentwürfe`. Ordner mit fehlgeschlagenen, abgebrochenen, ausgeschlossenen oder nicht gestarteten Einträgen bleiben außerhalb dieses Unterordners, damit offene Arbeit sichtbar bleibt. `Protokollentwürfe` wird von zukünftigen Kopier- und Scanvorgängen ausgeschlossen. Besteht dort bereits ein gleichnamiger Ordner, ist eine Benutzerentscheidung erforderlich; ein automatisches Überschreiben findet nicht statt.
 
+### D-013: Manuelle OCC->Excel-Zuordnung vor Start
+
+**Status:** entschieden und in GUI umgesetzt
+
+Wenn ein Fundordner mehrere Excel-Dateien enthält, wird pro OCC-Datei eine manuelle Zuordnung OCC->Excel in der GUI erfasst. Der Verarbeitungsstart ist blockiert, solange mindestens eine OCC-Datei im betroffenen Fundordner nicht zugeordnet ist.
+
+### D-014: Nachtlauf mit Fehlerbericht
+
+**Status:** entschieden und im Worker umgesetzt
+
+Der unbeaufsichtigte Lauf arbeitet bei Einzelfehlern weiter und sammelt Fehler sowie übersprungene Einträge. Nach Laufende wird bei Bedarf ein maschinenlesbarer Fehlerbericht erzeugt.
+
 ## Offene Entscheidungen
 
 ### O-001: Zuordnung OCC zu Excel
 
-**Teilweise geklärt:** Dateien der zweiten Station sind über den case-insensitiven Marker `EZE` im Dateinamen erkennbar. Ist genau eine Excel-Datei vorhanden, ist sie das gemeinsame Ziel aller `*.occ`-Dateien des fachlichen Ordners.
+**Geklärt:** Ist genau eine Excel-Datei vorhanden, ist sie das gemeinsame Ziel aller `*.occ`-Dateien des Fundordners. Gibt es mehrere Excel-Dateien, erfolgt eine manuelle OCC->Excel-Zuordnung in der GUI vor Start.
 
-**Verbleibende Frage:** Welche Merkmale verbinden Dateien zuverlässig, wenn die EZE-Regel keinen oder mehrere Kandidaten liefert?
-
-Zu prüfen:
-
-- weiterer gemeinsamer Teil des Dateinamens,
-- Trafostationsname in Dateiname oder Dateiinhalt neben `EZE`,
-- zeitliche Nähe,
-- feste Ordnerstruktur,
-- Inhalt bestimmter Excel-Zellen,
-- manuelle Zuordnung als einzige sichere Variante.
-
-Benötigt werden reale, anonymisierte Beispiele für eindeutige und mehrdeutige Fälle.
+**Verbleibende Frage:** Soll künftig zusätzlich eine automatische Vorbelegung der manuellen Zuordnung aus Namensmustern erfolgen?
 
 ### O-002: Bestehende Exportlogik
 

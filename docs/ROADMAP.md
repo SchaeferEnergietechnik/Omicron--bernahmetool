@@ -32,10 +32,10 @@
 
 - fachliche Zuordnungsregeln anhand echter Beispiele definieren
 - automatische Vorschläge implementieren
-- manuelle Auswahl bei mehreren Excel-Dateien ermöglichen
+- manuelle OCC->Excel-Auswahl bei mehreren Excel-Dateien ermöglichen
 - unklare Einträge standardmäßig von der Verarbeitung ausschließen
 
-**Ergebnis:** Mehrere Trafostationen im gleichen Bereich können sicher getrennt zugeordnet werden.
+**Ergebnis:** Mehrere Trafostationen im gleichen Bereich können sicher getrennt zugeordnet werden; der Start erfolgt nur mit vollständiger Zuordnung.
 
 ## Phase 4: Stapelverarbeitung und Abbruch
 
@@ -46,6 +46,8 @@
 - kontrollierten Abbruch implementieren
 - Excel-Dateien atomar beziehungsweise mit Sicherung schreiben
 - Fehler je Eintrag isolieren
+- Laufzeit und aktuellen Verarbeitungsschritt anzeigen
+- Fehlerbericht für unbeaufsichtigte Läufe schreiben
 
 **Ergebnis:** Große Ordnerbäume können nachvollziehbar und unterbrechbar verarbeitet werden.
 
@@ -60,4 +62,4 @@
 
 ## Nächster konkreter Schritt
 
-Die bestehende funktionierende Verarbeitung sowie ein anonymisiertes Beispiel mit zwei `*.occ`- und zwei Excel-Dateien bereitstellen. Daraus lassen sich technische Integration und fachliche Zuordnungsregeln belastbar ableiten.
+Terminexcel-Kundenzuordnung in den Worker integrieren, danach die Erfolgsablage nach `Protokollentwürfe` einschließlich Konfliktbehandlung implementieren und mit einem echten Windows-End-to-End-Nachtlauf validieren.

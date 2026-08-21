@@ -1,23 +1,23 @@
 # Projektstand bei Pausierung
 
-**Stand:** 9. August 2026  
-**Status:** Electron-Desktop-GUI, nativer Cloud-Import und Python-Worker-Anbindung als erste produktive Windows-Grundlage umgesetzt. Fachliche End-to-End-Erweiterungen sind noch offen.
+**Stand:** 21. August 2026  
+**Status:** Electron-Desktop-GUI, nativer Cloud-Import und Python-Worker sind lauffähig. Manuelle OCC-zu-Excel-Zuordnung in der GUI vor Start, sichtbare Schrittanzeige mit Laufzeit und robuster Nachtlauf mit Fehlerbericht sind umgesetzt.
 
 ## Ziel
 
-Das spätere Windows-Tool soll einen lokalen Startordner rekursiv nach `*.occ` und zugehörigen Excel-Dateien durchsuchen, die Zuordnung vorab anzeigen und anschließend die Omicron-Daten sichtbar exportieren und in die Arbeitsmappen übernehmen. Der Vorgang muss kontrolliert abbrechbar sein.
+Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner rekursiv erfassen, OCC-Dateien vor dem Start eindeutig auf Excel-Ziele zuordnen und danach robust als Stapel abarbeiten. Für Nachtschichten soll der Lauf bei Einzelfehlern weiterlaufen und am Ende einen nachvollziehbaren Fehlerbericht erzeugen.
 
 ## Festgelegter Ablauf
 
 1. Lokalen Startordner auswählen; den zuletzt verwendeten Ordner speichern.
 2. Startordner und Unterordner rekursiv nach OCC- und Excel-Dateien durchsuchen.
-3. Gefundene Dateien und vorgeschlagene Zuordnungen anzeigen.
-4. Mehrdeutige Zuordnungen vom Benutzer bestätigen lassen.
-5. OCC-Dateien nacheinander über die sichtbare Omicron-Oberfläche exportieren.
-6. Exportdaten über Power Query in die zugeordnete Excel-Datei laden.
-7. Kunden anhand von Prüfer und Prüfdatum aus `Y:\GES Energietechnik\Termine.xlsx` ermitteln und gegen `Kunden!A1:A35` prüfen.
-8. Kundenwert vor der Protokollnummernerzeugung nach `Allgemeine Angaben!C2` schreiben.
-9. Die drei vorgesehenen VBA-Makros ausführen und die Arbeitsmappe speichern.
+3. Gefundene Dateien und Zuordnungsstatus anzeigen.
+4. Bei mehreren Excel-Dateien pro Ordner OCC-Dateien manuell in der GUI zuordnen.
+5. Verarbeitung erst starten, wenn alle Zuordnungen eindeutig sind.
+6. Je Zuordnungsgruppe: Mashup beenden, OCC sichtbar exportieren, danach Excel aktualisieren und Makros ausführen.
+7. Laufzeit und aktueller Schritt laufend anzeigen.
+8. Bei Einzelfehlern nicht abbrechen, sondern weiterarbeiten und Fehler sammeln.
+9. Nach Laufende Zusammenfassung und Fehlerbericht ausgeben.
 
 ## Erledigt
 
@@ -26,6 +26,12 @@ Das spätere Windows-Tool soll einen lokalen Startordner rekursiv nach `*.occ` u
 - Rekursiver Cloud-Scan und nicht überschreibender lokaler Import in den Desktop-Prozess verlagert.
 - GUI mit dem separaten Python-Worker, JSON-Lines-Fortschritt und kontrolliertem Abbruch verbunden.
 - Electron-Installer-Konfiguration für einen Windows-NSIS-Build ergänzt.
+- Verarbeitungsschritte im UI sichtbar gemacht: Mashup, OCC-Export, Excel-Bearbeitung, Abschluss.
+- Laufzeit-Timer im UI ergänzt.
+- Fehlerbericht als JSON-Datei aus dem Worker ergänzt, wenn Fehler oder Skip-Fälle auftreten.
+- Worker-Reihenfolge für Fundordner stabilisiert: OCC-Reihenfolge NAP/sonstige vor EZE.
+- Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.
+- Manuelle Zuordnung OCC -> Excel in der GUI vor Verarbeitungsstart ergänzt.
 
 - React-/TypeScript-/Vite-Oberfläche als Renderer der Desktop-Anwendung umgesetzt.
 - Produktvision, Ablauf, Anforderungen, Integrationen, Entscheidungen und Roadmap dokumentiert.
@@ -70,7 +76,6 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 
 ## Offene fachliche Punkte
 
-- Mehrdeutige Excel-Ziele werden derzeit sicher als Konflikt angezeigt, aber noch nicht in der GUI manuell aufgelöst.
 - Erfolgreiche Fundordner werden noch nicht automatisch nach `Protokollentwürfe` verschoben.
 - Die Terminexcel-Kundenauflösung ist noch nicht in den Worker integriert.
 - Abschlussprotokoll, Wiederholung fehlgeschlagener Einträge und atomare Excel-Sicherung fehlen noch.
@@ -86,17 +91,17 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 - Parallelbetrieb in derselben Windows-Sitzung ist nicht zuverlässig möglich.
 - Das Legacy-Programm löscht global CSV-Dateien unter `C:\Omicron_Datenexport` und beendet den Power-Query-Loader zwangsweise; dies muss vor Produktiveinsatz eingegrenzt werden.
 - Das Legacy-Programm wählt aktuell nur die alphabetisch erste XLSM-Datei und speichert ohne Transaktion oder Sicherung.
-- Ein sauberer Abbruch zwischen Omicron-, Export- und Excel-Schritten fehlt noch.
+- Für End-to-End-Validierung bleibt ein echter Windows-Testlauf mit Omicron und Excel erforderlich.
 - Die Terminexcel auf Laufwerk `Y:` muss erreichbar sein, bevor eine Arbeitsmappe verändert wird.
 
 ## Empfohlene Wiederaufnahme
 
 1. V19m an einer Sicherungskopie gemäß `V19M_VBA_MIGRATION.md` ergänzen, kompilieren und alle drei Makros testen.
 2. Offene Nummernkreise für Protokollersteller klären.
-3. Mehrdeutige OCC-/Excel-Zuordnungen in der GUI manuell auflösbar machen.
-4. Legacy-Omicron-Automation kapseln und sichere CSV-Arbeitsverzeichnisse einführen.
-5. Terminexcel-Kundenauflösung und Excel-Verarbeitung integrieren.
-6. Erfolgsablage, Abschlussprotokoll, Sicherung und Wiederanlauf ergänzen.
+3. Terminexcel-Kundenauflösung in den Worker integrieren.
+4. Erfolgsablage nach `Protokollentwürfe` inklusive Konfliktbehandlung ergänzen.
+5. Wiederanlauf fehlgeschlagener Einträge ergänzen.
+6. Atomare Excel-Sicherung und Wiederherstellungsstrategie ergänzen.
 7. End-to-End-Test unter Windows mit Kopien der Beispieldateien durchführen.
 
 ## Validierungsstand

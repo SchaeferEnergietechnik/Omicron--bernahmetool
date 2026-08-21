@@ -88,7 +88,8 @@ Zusätzlich gilt:
 - In diesem gemeinsamen Ziel kennzeichnet `EZE` die zweite Station beziehungsweise deren Datenbereich.
 - Die EZE-Regel wird erst zur Auswahl eines Excel-Ziels verwendet, wenn mehrere geeignete Excel-Dateien vorhanden sind.
 - Bei mehreren möglichen Excel-Dateien ist eine sichtbare Auswahl erforderlich.
-- Eine manuelle Auswahl muss vor dem Start bestätigt werden.
+- Die manuelle Auswahl erfolgt pro OCC-Datei in der GUI als OCC->Excel-Zuordnung.
+- Der Start der Verarbeitung ist gesperrt, solange ein Ordner ungeklärte Zuordnungen hat.
 - Optional kann sich das Tool später bestätigte Namensmuster merken.
 
 ## 6. Verarbeitung
@@ -96,13 +97,20 @@ Zusätzlich gilt:
 Die Einträge werden nacheinander verarbeitet. Für jeden Eintrag:
 
 1. Quelldatei und Ziel erneut auf Existenz und Zugriff prüfen.
-2. Messdaten aus der `*.occ`-Datei exportieren.
-3. Ziel-Excel sicher öffnen.
-4. Daten in die vorgesehenen Bereiche übernehmen.
-5. Ergebnis sicher speichern.
-6. Status und Fehlermeldung protokollieren.
+2. Vor der Gruppe den Mashup-Loader kontrolliert beenden.
+3. Messdaten aus den zugeordneten `*.occ`-Dateien nacheinander exportieren.
+4. Ziel-Excel sicher öffnen.
+5. Daten in die vorgesehenen Bereiche übernehmen.
+6. Ergebnis sicher speichern.
+7. Status und Fehlermeldung protokollieren.
 
 Ein Fehler in einem Eintrag soll standardmäßig die übrigen eindeutigen Einträge nicht verhindern.
+
+Für den Nachtlauf gilt zusätzlich:
+
+- Der Lauf verarbeitet weitere Einträge trotz Fehlern einzelner Ordner.
+- Fehler und übersprungene Einträge werden gesammelt.
+- Am Ende wird ein Fehlerbericht als JSON-Datei im Arbeitsbereich ausgegeben.
 
 Nach Abschluss aller Einträge eines Fundordners:
 
@@ -144,4 +152,5 @@ Die Ergebnisansicht zeigt mindestens:
 - mit Fehler beendet,
 - übersprungen,
 - durch Benutzer abgebrochen,
-- Speicherort oder Exportmöglichkeit des Protokolls.
+- Gesamtlaufzeit,
+- Speicherort des Fehlerberichts bei Fehlern oder Skip-Fällen.
