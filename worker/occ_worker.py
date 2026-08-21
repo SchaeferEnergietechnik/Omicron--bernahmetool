@@ -381,13 +381,13 @@ class Worker:
                 self.emit("item_started", itemId=item_id, index=index, total=len(items))
 
                 # Gewünschte Reihenfolge pro Ordner:
-                # je Excel-Gruppe: Mashup beenden -> zugehörige OCC exportieren -> Excel-Bearbeitung
+                # je Excel-Gruppe: zugehörige OCC exportieren -> Excel-Bearbeitung
                 for excel_path, occ_paths in excel_groups:
                     if not occ_paths or not excel_path.is_file():
                         raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {excel_path}")
 
-                    self.terminate_mashup_loader()
                     for occ_path in occ_paths:
+                        self.terminate_mashup_loader()
                         self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
                         self.export_occ(occ_path)
                         self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
