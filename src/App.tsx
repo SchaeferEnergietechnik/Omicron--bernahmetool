@@ -283,9 +283,13 @@ function App() {
   function toggleFolderEnabled(folderId: string) {
     setFolders((current) => current.map((folder) => {
       if (folder.id !== folderId || folder.state === 'fertig') return folder
-      return {
+      const updated: WorkFolder = {
         ...folder,
         enabled: !(folder.enabled ?? true),
+      }
+      return {
+        ...updated,
+        state: evaluateFolderState(updated),
       }
     }))
   }
@@ -381,19 +385,26 @@ function App() {
   }
 
   async function runTest() {
-    const conflictFolders = folders.filter((folder) => folder.state === 'konflikt')
+    const runtimeFolders = folders.map((folder) => ({
+      ...folder,
+      state: evaluateFolderState(folder),
+    }))
+    const conflictFolders = runtimeFolders.filter((folder) => folder.state === 'konflikt')
     if (conflictFolders.length) {
       setNotice(`Es gibt ${conflictFolders.length} Ordner mit ungeklärter Zuordnung. Bitte vor Export klären.`)
       return
     }
 
-    const readyFolders = folders.filter((folder) => folder.state === 'bereit')
+    const readyFolders = runtimeFolders.filter((folder) => folder.state === 'bereit')
     if (!readyFolders.length) {
       setNotice('Es gibt keine konfliktfreien Fundordner für den Testlauf.')
       return
     }
     if (!window.desktopApi) {
-      setFolders((current) => current.map((folder) => folder.state === 'bereit' ? { ...folder, state: 'fertig' } : folder))
+      setFolders((current) => current.map((folder) => {
+        const evaluated = evaluateFolderState(folder)
+        return evaluated === 'bereit' ? { ...folder, state: 'fertig' } : { ...folder, state: evaluated }
+      }))
       setNotice(`${readyFolders.length} Fundordner wurden im Browser-Testlauf simuliert.`)
       return
     }

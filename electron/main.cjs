@@ -30,7 +30,7 @@ async function findFolders(root) {
     const files = entries.filter((entry) => entry.isFile())
     const occFiles = files.filter((entry) => entry.name.toLowerCase().endsWith('.occ')).map((entry) => entry.name)
     const excelFiles = files
-      .filter((entry) => /\.xls[xm]$/i.test(entry.name) && !entry.name.startsWith('~$'))
+      .filter((entry) => /\.xls[xm]$/i.test(entry.name) && !entry.name.startsWith('~$') && !entry.name.toLowerCase().includes('wartung'))
       .map((entry) => entry.name)
     if (occFiles.length) result.push({ path: relative, sourcePath: current, occFiles, excelFiles })
     await Promise.all(entries
