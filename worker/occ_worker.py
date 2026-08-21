@@ -58,7 +58,7 @@ class Worker:
             self.check_cancelled()
             time.sleep(min(0.5, max(0, end_time - time.monotonic())))
 
-    def wait_for_main_window(self, timeout: int = 45):
+    def wait_for_main_window(self, timeout: int = 30):
         end_time = time.monotonic() + timeout
         last_error: Exception | None = None
         while time.monotonic() < end_time:
@@ -83,6 +83,8 @@ class Worker:
             return True
         except Exception:
             pass
+        
+        # Fallback: Try clicking Datei menu with different strategies
         for candidate in (
             {"title": "Datei", "control_type": "TabItem"},
             {"title": "Datei", "control_type": "Button"},
@@ -97,7 +99,18 @@ class Worker:
             except Exception:
                 continue
         else:
-            return False
+            # Fallback: Try keyboard shortcut Alt+D
+            try:
+                window.set_focus()
+                window.type_keys("%D")
+                self.wait(1)
+                return self._click_export_menu_item(window)
+            except Exception:
+                return False
+        
+        return self._click_export_menu_item(window)
+    
+    def _click_export_menu_item(self, window) -> bool:
         for candidate in (
             {"title": "Daten exportieren...", "control_type": "MenuItem"},
             {"title": "Daten exportieren...", "control_type": "ListItem"},
@@ -112,7 +125,14 @@ class Worker:
                     return True
             except Exception:
                 continue
-        return False
+        
+        # Fallback: Try keyboard navigation
+        try:
+            window.type_keys("{DOWN 8}{ENTER}")
+            self.wait(1)
+            return True
+        except Exception:
+            return False
 
     def confirm_export_dialog(self, timeout: int = 30) -> bool:
         end_time = time.monotonic() + timeout
