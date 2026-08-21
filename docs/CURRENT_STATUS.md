@@ -1,7 +1,8 @@
-# Projektstand bei Pausierung
+# Projektstand
 
-**Stand:** 21. August 2026  
-**Status:** Electron-Desktop-GUI, nativer Cloud-Import und Python-Worker sind lauffähig. Manuelle OCC-zu-Excel-Zuordnung in der GUI vor Start, sichtbare Schrittanzeige mit Laufzeit und robuster Nachtlauf mit Fehlerbericht sind umgesetzt.
+**Stand:** 21. August 2026, 20:24 Uhr  
+**Status:** Electron-Desktop-GUI, nativer Cloud-Import, Python-Worker mit vollständiger Excel-Makro-Integration, manuelle OCC-zu-Excel-Zuordnung, sichtbare Schrittanzeige und robuster Nachtlauf sind lauffähig.  
+**Letzter Commit:** `0c0db14` – Update occ_worker.py (56 Zeilen Ergänzung)
 
 ## Ziel
 
@@ -33,6 +34,13 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.
 - Manuelle Zuordnung OCC -> Excel in der GUI vor Verarbeitungsstart ergänzt.
 
+- **Worker-Integration (neu):** Python-Worker führt alle drei erforderlichen Excel-Makros aus:
+  - `Tabelle1.Protokollnummer_generieren_unsichtbar` (Protokollnummer-Generierung)
+  - `Modul1.BereicheEinOderAusblenden_Start` (mit Fallback auf `BereicheEinOderAusblenden_Start`)
+  - `Tabelle7.ZeilenAusblendenWennLeer` (Leerzeilen ausblenden)
+- **Makro-Fehlerbehandlung (neu):** Versucht Bereichsmakro mit zwei Kandidaten; gibt aussagekräftige Fehlermeldung, wenn beide fehlen.
+- **Vorbedingung für V19m:** VBA-Ergänzung `legacy/vba/V19m_Modul1_Ergaenzung.bas` muss noch manuell unter Windows mit Excel in V19m importiert werden.
+
 - React-/TypeScript-/Vite-Oberfläche als Renderer der Desktop-Anwendung umgesetzt.
 - Produktvision, Ablauf, Anforderungen, Integrationen, Entscheidungen und Roadmap dokumentiert.
 - Bestehendes Python-Programm statisch analysiert und unverändert unter `legacy/` abgelegt.
@@ -57,6 +65,29 @@ Das Python-Programm erwartet drei Makros:
 Das bestehende private Ereignis `Tabelle7.CommandButton1_Click` in V19m darf nicht ersetzt werden. Es enthält zusätzlich eine W14-Regel für die Zeilen 159 bis 164. Die öffentliche Prozedur wird nur ergänzend in das leere `Modul1` importiert.
 
 Die Binärdatei V19m wurde im Repository nicht verändert. Import, Kompilierung und Funktionstest müssen später unter Windows mit Excel an einer Sicherungskopie erfolgen.
+
+## Aktuelle Worker-Implementierung
+
+Der Python-Worker unter `worker/occ_worker.py` ist nun vollständig implementiert:
+
+- **OCC-Export:** Öffnet OCC sichtbar, öffnet Exportdialog, wartet auf stabile CSV-Ausgabe, schließt Omicron
+- **Excel-Refresh:** Öffnet Arbeitsmappe, führt `RefreshAll` durch, wartet auf Berechnung
+- **Makro-Ausführung:** Ruft nacheinander auf:
+  1. `Tabelle1.Protokollnummer_generieren_unsichtbar` (Protokollnummer)
+  2. `Modul1.BereicheEinOderAusblenden_Start` oder `BereicheEinOderAusblenden_Start` (mit Fallback-Logik)
+  3. `Tabelle7.ZeilenAusblendenWennLeer` (Leerzeilen-Ausblendung)
+- **Fehlerbehandlung:** Sammelt Fehler und Skip-Fälle für den Abschlussbericht, setzt Verarbeitung bei Einzelfehlern fort
+- **Fortschritt:** Emittiert JSON-Lines-Events für Mashup, OCC, Excel und Gesamtfortschritt
+- **Abbruch:** Respektiert Abbruchdatei an sicheren Grenzen
+
+## Vorbedingungen für Produktiveinsatz
+
+1. **V19m-VBA:** `legacy/vba/V19m_Modul1_Ergaenzung.bas` muss in V19m per `Alt+F11` -> Importieren importiert werden
+2. **Excel-COM:** Windows-System mit Excel und VBA-Laufzeitumgebung erforderlich
+3. **Omicron:** Omicron muss auf dem Windows-System installiert sein
+4. **Cloud-Quelle:** Erreichbarer Cloud-Ordner oder lokaler Quellordner konfiguriert
+5. **Terminexcel:** `Y:\GES Energietechnik\Termine.xlsx` muss für die Kundenauflösung erreichbar sein
+
 
 ## Prüfer und Terminzuordnung
 
@@ -94,15 +125,23 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 - Für End-to-End-Validierung bleibt ein echter Windows-Testlauf mit Omicron und Excel erforderlich.
 - Die Terminexcel auf Laufwerk `Y:` muss erreichbar sein, bevor eine Arbeitsmappe verändert wird.
 
-## Empfohlene Wiederaufnahme
+## Nächste Entwicklungsschritte
 
-1. V19m an einer Sicherungskopie gemäß `V19M_VBA_MIGRATION.md` ergänzen, kompilieren und alle drei Makros testen.
-2. Offene Nummernkreise für Protokollersteller klären.
-3. Terminexcel-Kundenauflösung in den Worker integrieren.
-4. Erfolgsablage nach `Protokollentwürfe` inklusive Konfliktbehandlung ergänzen.
-5. Wiederanlauf fehlgeschlagener Einträge ergänzen.
-6. Atomare Excel-Sicherung und Wiederherstellungsstrategie ergänzen.
-7. End-to-End-Test unter Windows mit Kopien der Beispieldateien durchführen.
+1. **V19m-VBA manuell ergänzen** (Vorbedingung für Tests) – unter Windows an einer Sicherungskopie durchführen:
+   - `legacy/vba/V19m_Modul1_Ergaenzung.bas` öffnen
+   - V19m in Excel öffnen → `Alt+F11` → VBA-Editor
+   - Leeres `Modul1` markieren und Inhalt einfügen oder BAS-Datei importieren
+   - Makros testen: `Modul1.BereicheEinOderAusblenden_Start`, `Tabelle1.Protokollnummer_generieren_unsichtbar`, `Tabelle7.ZeilenAusblendenWennLeer`
+
+2. **Terminexcel-Kundenauflösung in Worker integrieren** – Kundennamen aus Terminexcel zuordnen
+
+3. **Erfolgsablage nach `Protokollentwürfe`** – erfolgreiche Fundordner automatisch verschieben
+
+4. **End-to-End-Test unter Windows** – mit Kopien der Beispieldateien und echtem Omicron
+
+5. **Wiederanlauf fehlgeschlagener Einträge** – neue Jobs aus Skip-Liste generieren
+
+6. **Atomare Excel-Sicherung** – Backup vor Makro-Ausführung, Wiederherstellung bei Fehler
 
 ## Validierungsstand
 
