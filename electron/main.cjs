@@ -62,20 +62,34 @@ ipcMain.handle('import-cloud', async (_, { source, destination }) => {
   for (const folder of folders) {
     const relative = path.relative(source, folder.sourcePath)
     const target = path.join(destination, relative)
-    try {
-      await copyTree(folder.sourcePath, target)
-      const mappingState = folder.excelFiles.length === 1 ? 'bereit' : 'konflikt'
-      const message = folder.excelFiles.length === 0
-        ? 'Keine Excel-Datei im Fundordner gefunden.'
-        : folder.excelFiles.length > 1
-          ? 'Mehrere Excel-Dateien gefunden; manuelle Zuordnung erforderlich.'
-          : undefined
-      imported.push({ ...folder, path: relative || path.basename(source), localPath: target, state: mappingState, message })
-    } catch (error) {
-      imported.push({ ...folder, path: relative || path.basename(source), localPath: target, state: 'konflikt', message: error.message })
-    }
+    const mappingState = folder.excelFiles.length === 1 ? 'bereit' : 'konflikt'
+    const message = folder.excelFiles.length === 0
+      ? 'Keine Excel-Datei im Fundordner gefunden.'
+      : folder.excelFiles.length > 1
+        ? 'Mehrere Excel-Dateien gefunden; manuelle Zuordnung erforderlich.'
+        : undefined
+    imported.push({ ...folder, path: relative || path.basename(source), localPath: target, state: mappingState, message })
   }
   return imported
+})
+
+ipcMain.handle('prepare-local-folders', async (_, { folders }) => {
+  if (!Array.isArray(folders)) throw new Error('Ungültige Kopierliste für lokale Ordner.')
+  const prepared = []
+  for (const folder of folders) {
+    try {
+      if (!folder?.sourcePath || !folder?.localPath) {
+        throw new Error('sourcePath oder localPath fehlt')
+      }
+      await copyTree(folder.sourcePath, folder.localPath)
+      prepared.push({ id: folder.id, localPath: folder.localPath })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      const label = folder?.path || folder?.id || folder?.sourcePath || 'Unbekannter Ordner'
+      throw new Error(`Lokale Kopie fehlgeschlagen (${label}): ${reason}`)
+    }
+  }
+  return prepared
 })
 
 ipcMain.handle('run-worker', async (event, { job, workerPath, pythonPath }) => {

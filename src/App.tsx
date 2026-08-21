@@ -21,6 +21,7 @@ type FolderState = 'bereit' | 'konflikt' | 'fertig'
 type WorkFolder = {
   id: string
   path: string
+  sourcePath?: string
   occFiles: string[]
   excelFiles: string[]
   state: FolderState
@@ -33,6 +34,7 @@ type WorkFolder = {
 type DesktopApi = {
   chooseDirectory: (title: string) => Promise<string | null>
   importCloud: (source: string, destination: string) => Promise<Array<WorkFolder & { sourcePath: string }>>
+  prepareLocalFolders: (folders: Array<{ id: string; path: string; sourcePath: string; localPath: string }>) => Promise<Array<{ id: string; localPath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
   onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string }) => void) => () => void
@@ -51,32 +53,6 @@ type DirectoryHandle = FileSystemDirectoryHandle & {
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
 }
-
-const demoFolders: WorkFolder[] = [
-  {
-    id: 'bensheim',
-    path: '2026 / Bensheim / Station Nord',
-    occFiles: ['V24_NAP_V2_Bensheim.occ', 'V9_EZE_mit_Anregung_Bensheim.occ'],
-    excelFiles: ['V19m_Übergeordneter_Entkupplungsschutz.xlsm'],
-    state: 'bereit',
-    enabled: true,
-    selectedExcelByOcc: {
-      'V24_NAP_V2_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
-      'V9_EZE_mit_Anregung_Bensheim.occ': 'V19m_Übergeordneter_Entkupplungsschutz.xlsm',
-    },
-  },
-  {
-    id: 'gross-gerau',
-    path: '2026 / Groß-Gerau / Station West',
-    occFiles: ['Schutzprüfung_Station_West.occ'],
-    excelFiles: ['Prüfdaten_Station_West.xlsm'],
-    state: 'bereit',
-    enabled: true,
-    selectedExcelByOcc: {
-      'Schutzprüfung_Station_West.occ': 'Prüfdaten_Station_West.xlsm',
-    },
-  },
-]
 
 function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
   if (excelFiles.length !== 1) return {}
@@ -124,36 +100,6 @@ async function discoverWorkFolders(
       .map((folder) => discoverWorkFolders(folder, `${relativePath} / ${folder.name}`)),
   )
   return [...current, ...nested.flat()]
-}
-
-async function createTargetFolder(destination: DirectoryHandle, path: string) {
-  const segments = path.split(' / ')
-  let parent = destination
-  for (const segment of segments.slice(0, -1)) {
-    parent = await parent.getDirectoryHandle(segment, { create: true }) as DirectoryHandle
-  }
-  const name = segments.at(-1)!
-  try {
-    await parent.getDirectoryHandle(name)
-    return null
-  } catch {
-    return parent.getDirectoryHandle(name, { create: true }) as Promise<DirectoryHandle>
-  }
-}
-
-async function copyFolder(source: DirectoryHandle, destination: DirectoryHandle) {
-  for await (const entry of source.values()) {
-    if (entry.kind === 'file') {
-      const sourceFile = await entry.getFile()
-      const targetFile = await destination.getFileHandle(entry.name, { create: true })
-      const writer = await targetFile.createWritable()
-      await writer.write(sourceFile)
-      await writer.close()
-    } else {
-      const targetDirectory = await destination.getDirectoryHandle(entry.name, { create: true })
-      await copyFolder(entry as DirectoryHandle, targetDirectory as DirectoryHandle)
-    }
-  }
 }
 
 function App() {
@@ -294,6 +240,20 @@ function App() {
     }))
   }
 
+  function toggleAllFoldersEnabled(enabled: boolean) {
+    setFolders((current) => current.map((folder) => {
+      if (folder.state === 'fertig') return folder
+      const updated: WorkFolder = {
+        ...folder,
+        enabled,
+      }
+      return {
+        ...updated,
+        state: evaluateFolderState(updated),
+      }
+    }))
+  }
+
   async function chooseDirectory(kind: 'cloud' | 'local') {
     if (window.desktopApi) {
       const selected = await window.desktopApi.chooseDirectory(kind === 'cloud' ? 'Cloud-Quellordner auswählen' : 'Lokalen Arbeitsordner auswählen')
@@ -348,7 +308,7 @@ function App() {
           const enriched: WorkFolder = { ...folder, id: folder.path, selectedExcelByOcc }
           return { ...enriched, state: evaluateFolderState(enriched) }
         }))
-        setNotice(`${imported.length} OCC-Fundordner wurden lokal bereitgestellt.`)
+        setNotice(`${imported.length} OCC-Fundordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
         return
       }
       if (!cloudHandle || !localHandle) {
@@ -356,32 +316,18 @@ function App() {
         return
       }
       const discovered = await discoverWorkFolders(cloudHandle)
-      const imported: WorkFolder[] = []
-      for (const folder of discovered) {
-        const target = await createTargetFolder(localHandle, folder.path)
-        if (!target) {
-          imported.push({ ...folder, state: 'konflikt', selectedExcelByOcc: {} })
-          continue
-        }
-        await copyFolder(folder.handle, target)
+      const imported: WorkFolder[] = discovered.map((folder) => {
         const selectedExcelByOcc = initSelectedExcelByOcc(folder.occFiles, folder.excelFiles)
         const enriched: WorkFolder = { ...folder, selectedExcelByOcc }
-        imported.push({ ...enriched, state: evaluateFolderState(enriched) })
-      }
+        return { ...enriched, state: evaluateFolderState(enriched) }
+      })
       setFolders(imported)
-      setNotice(`${imported.length} OCC-Fundordner wurden geprüft. Die Cloud-Quelle wurde nur gelesen.`)
+      setNotice(`${imported.length} OCC-Fundordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
     } catch (error) {
       setNotice(`Der Import konnte nicht abgeschlossen werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
       setIsScanning(false)
     }
-  }
-
-  function loadDemo() {
-    setCloudPath('Cloud / Schutzprüfungen')
-    setLocalPath('C:\\Omicron-Arbeitsordner')
-    setFolders(demoFolders)
-    setNotice('Beispieldaten geladen. Der Testlauf verändert keine Dateien.')
   }
 
   async function runTest() {
@@ -396,19 +342,33 @@ function App() {
     }
 
     const readyFolders = runtimeFolders.filter((folder) => folder.state === 'bereit')
-    if (!readyFolders.length) {
+    const processingFolders = readyFolders.filter((folder) => folder.enabled ?? true)
+    if (!processingFolders.length) {
       setNotice('Es gibt keine konfliktfreien Fundordner für den Testlauf.')
       return
     }
     if (!window.desktopApi) {
       setFolders((current) => current.map((folder) => {
         const evaluated = evaluateFolderState(folder)
-        return evaluated === 'bereit' ? { ...folder, state: 'fertig' } : { ...folder, state: evaluated }
+        return (folder.enabled ?? true) && evaluated === 'bereit' ? { ...folder, state: 'fertig' } : { ...folder, state: evaluated }
       }))
-      setNotice(`${readyFolders.length} Fundordner wurden im Browser-Testlauf simuliert.`)
+      setNotice(`${processingFolders.length} Fundordner wurden im Browser-Testlauf simuliert.`)
       return
     }
-    const items = readyFolders.map((folder) => ({
+
+    const copyPlan = processingFolders.map((folder) => {
+      if (!folder.sourcePath || !folder.localPath) {
+        throw new Error(`Kopierpfade fehlen für ${folder.path}`)
+      }
+      return {
+        id: folder.id,
+        path: folder.path,
+        sourcePath: folder.sourcePath,
+        localPath: folder.localPath,
+      }
+    })
+
+    const items = processingFolders.map((folder) => ({
       enabled: folder.enabled ?? true,
       ...(folder.excelFiles.length === 1
         ? {
@@ -432,9 +392,11 @@ function App() {
     setRunStartedAt(Date.now())
     setElapsedSeconds(0)
     setCurrentStep('Vorbereitung')
-    setProgress({ completed: 0, total: readyFolders.length, current: '', detail: 'Worker wird gestartet' })
+    setProgress({ completed: 0, total: processingFolders.length, current: '', detail: 'Lokale Kopien werden vorbereitet' })
     setNotice('Sichtbare Omicron-Automatisierung gestartet. Bitte den Arbeitsplatz nicht bedienen.')
     try {
+      await window.desktopApi.prepareLocalFolders(copyPlan)
+      setProgress((current) => ({ ...current, detail: 'Worker wird gestartet' }))
       await window.desktopApi.runWorker({ items, reportPath }, '')
     } catch (error) {
       setNotice(`Worker konnte nicht gestartet werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
@@ -457,6 +419,9 @@ function App() {
   const readyCount = folders.filter((folder) => folder.state === 'bereit').length
   const completeCount = folders.filter((folder) => folder.state === 'fertig').length
   const conflictCount = folders.filter((folder) => folder.state === 'konflikt').length
+  const selectableFolders = folders.filter((folder) => folder.state !== 'fertig')
+  const allSelectableEnabled = selectableFolders.length > 0 && selectableFolders.every((folder) => folder.enabled ?? true)
+  const activeReadyCount = folders.filter((folder) => (folder.enabled ?? true) && evaluateFolderState(folder) === 'bereit').length
   const progressPercent = progress.total ? Math.round((progress.completed / progress.total) * 100) : 0
 
   return (
@@ -473,7 +438,7 @@ function App() {
         <aside className="workflow-nav" aria-label="Arbeitsablauf">
           <div className="workflow-heading"><span>Arbeitsablauf</span><small>V1</small></div>
           <ol>
-            <li className="active"><span>1</span><div><strong>Bereitstellen</strong><small>Cloud lokal kopieren</small></div></li>
+            <li className="active"><span>1</span><div><strong>Bereitstellen</strong><small>Cloud prüfen</small></div></li>
             <li className={folders.length ? 'active' : ''}><span>2</span><div><strong>Vorschau</strong><small>Zuordnungen prüfen</small></div></li>
             <li className={completeCount ? 'active' : ''}><span>3</span><div><strong>Ablage</strong><small>Protokollentwürfe</small></div></li>
           </ol>
@@ -482,7 +447,7 @@ function App() {
 
         <section className="content">
           <div className="page-heading">
-            <div><span className="eyebrow">Erste Testversion</span><h1>Prüfungsordner bereitstellen</h1><p>OCC-Fundordner aus der Cloud lokal kopieren und vor der Datenübernahme prüfen.</p></div>
+            <div><span className="eyebrow">Erste Testversion</span><h1>Prüfungsordner bereitstellen</h1><p>OCC-Fundordner aus der Cloud prüfen und erst bei Start lokal bereitstellen.</p></div>
             <button className="icon-button" type="button" title="Ansicht zurücksetzen" onClick={reset}><RotateCcw size={18} /><span className="sr-only">Ansicht zurücksetzen</span></button>
           </div>
 
@@ -492,16 +457,16 @@ function App() {
               <div className="folder-choice"><Cloud size={21} /><div><span>Cloud-Quellordner</span><strong>{cloudPath || 'Noch nicht ausgewählt'}</strong></div><button type="button" onClick={() => chooseDirectory('cloud')}>Auswählen</button></div>
               <div className="folder-choice"><HardDrive size={21} /><div><span>Lokaler Arbeitsordner</span><strong>{localPath || 'Noch nicht ausgewählt'}</strong></div><button type="button" onClick={() => chooseDirectory('local')}>Auswählen</button></div>
             </div>
-            <div className="action-row"><button className="secondary-button" type="button" onClick={loadDemo}>Beispieldaten laden</button><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche und kopiere...' : 'Cloud-Ordner bereitstellen'}</button></div>
+            <div className="action-row"><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche...' : 'Cloud-Ordner prüfen'}</button></div>
           </section>
 
           <section className="preview" aria-labelledby="preview-heading">
-            <div className="preview-heading"><div><h2 id="preview-heading">Lokale Vorschau</h2><p>{folders.length ? `${folders.length} Fundordner im lokalen Arbeitsbereich` : 'Noch keine Fundordner bereitgestellt'}</p></div><div className="counts"><span>{readyCount} bereit</span><span>{conflictCount} Konflikte</span><span>{completeCount} erledigt</span></div></div>
-            {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}${!(folder.enabled ?? true) ? ' disabled' : ''}`} key={folder.id}><input type="checkbox" checked={folder.enabled ?? true} onChange={() => toggleFolderEnabled(folder.id)} disabled={isRunning || folder.state === 'fertig'} style={{ cursor: isRunning || folder.state === 'fertig' ? 'not-allowed' : 'pointer', width: 18, height: 18 }} /><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}{folder.state !== 'fertig' && (folder.enabled ?? true) && folder.excelFiles.length > 1 ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}><small>Manuelle Zuordnung vor Start:</small>{folder.occFiles.map((occFile) => <label key={occFile} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 1fr', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--muted)' }}>{occFile}</span><select value={(folder.selectedExcelByOcc ?? {})[occFile] ?? ''} onChange={(event) => setOccExcelMapping(folder.id, occFile, event.target.value)} disabled={isRunning} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Excel auswählen...</option>{folder.excelFiles.map((excelFile) => <option key={excelFile} value={excelFile}>{excelFile}</option>)}</select></label>)}</div> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Ordner aus oder laden Sie Beispieldaten, um die Vorschau zu testen.</p></div>}
+              <div className="preview-heading"><div><h2 id="preview-heading">Lokale Vorschau</h2><p>{folders.length ? `${folders.length} Fundordner gefunden` : 'Noch keine Fundordner geprüft'}</p></div><div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}><label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--muted)' }}><input type="checkbox" checked={allSelectableEnabled} onChange={(event) => toggleAllFoldersEnabled(event.target.checked)} disabled={isRunning || selectableFolders.length === 0} />Alle aktivieren/deaktivieren</label><div className="counts"><span>{readyCount} bereit</span><span>{conflictCount} Konflikte</span><span>{completeCount} erledigt</span></div></div></div>
+              {folders.length ? <div className="folder-list">{folders.map((folder) => <article className={`folder-row ${folder.state}${!(folder.enabled ?? true) ? ' disabled' : ''}`} key={folder.id}><input type="checkbox" checked={folder.enabled ?? true} onChange={() => toggleFolderEnabled(folder.id)} disabled={isRunning || folder.state === 'fertig'} style={{ cursor: isRunning || folder.state === 'fertig' ? 'not-allowed' : 'pointer', width: 18, height: 18 }} /><div className="folder-icon">{folder.state === 'fertig' ? <Archive size={19} /> : <FolderOpen size={19} />}</div><div className="folder-main"><strong>{folder.state === 'fertig' ? `Protokollentwürfe / ${folder.path}` : folder.path}</strong><span>{folder.occFiles.length} OCC-Datei{folder.occFiles.length === 1 ? '' : 'en'} · {folder.excelFiles.length || 'keine'} Excel-Datei{folder.excelFiles.length === 1 ? '' : 'en'}</span><small>{folder.occFiles.join(' · ')}</small>{folder.message ? <small>{folder.message}</small> : null}{folder.state !== 'fertig' && (folder.enabled ?? true) && folder.excelFiles.length > 1 ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}><small>Manuelle Zuordnung vor Start:</small>{folder.occFiles.map((occFile) => <label key={occFile} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 1fr', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--muted)' }}>{occFile}</span><select value={(folder.selectedExcelByOcc ?? {})[occFile] ?? ''} onChange={(event) => setOccExcelMapping(folder.id, occFile, event.target.value)} disabled={isRunning} style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Excel auswählen...</option>{folder.excelFiles.map((excelFile) => <option key={excelFile} value={excelFile}>{excelFile}</option>)}</select></label>)}</div> : null}</div><div className={`state-badge ${folder.state}`}>{folder.state === 'fertig' ? <Check size={15} /> : folder.state === 'konflikt' ? <TriangleAlert size={15} /> : <FileSpreadsheet size={15} />}{folder.state === 'fertig' ? 'abgelegt' : folder.state === 'konflikt' ? 'Konflikt' : 'bereit'}</div></article>)}</div> : <div className="empty-state"><FolderOpen size={28} /><p>Wählen Sie Cloud-Quelle und lokalen Arbeitsordner aus, um die Vorschau zu starten.</p></div>}
           </section>
 
           {isRunning ? <section aria-label="Verarbeitungsfortschritt" style={{ padding: '15px 16px', marginTop: 18, background: 'var(--accent-soft)', border: '1px solid #b9ded0', borderRadius: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 13 }}>{progressPercent}% abgeschlossen</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{progress.completed} von {progress.total} Fundordnern · Laufzeit {formatDuration(elapsedSeconds)}</span></div><div style={{ marginTop: 8, color: 'var(--accent-dark)', fontSize: 12 }}><strong>Aktueller Schritt:</strong> {currentStep}</div><div style={{ height: 9, overflow: 'hidden', margin: '10px 0 9px', background: '#cfe5dc', borderRadius: 999 }}><div style={{ width: `${progressPercent}%`, height: '100%', minWidth: 2, background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .35s ease' }} /></div><div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--muted)', fontSize: 11 }}><LoaderCircle className="spin" size={15} /><span>{progress.detail || 'Verarbeitung wird vorbereitet'}</span></div></section> : null}
-          <div className="action-bar"><div className="status-message" role="status"><CircleAlert size={17} /><span>{notice}</span></div>{isRunning ? <button className="secondary-button" type="button" onClick={cancelRun}><TriangleAlert size={18} />Abbruch anfordern</button> : <button className="primary-button" type="button" onClick={runTest} disabled={!readyCount}><Play size={18} />Verarbeitung starten</button>}</div>
+          <div className="action-bar"><div className="status-message" role="status"><CircleAlert size={17} /><span>{notice}</span></div>{isRunning ? <button className="secondary-button" type="button" onClick={cancelRun}><TriangleAlert size={18} />Abbruch anfordern</button> : <button className="primary-button" type="button" onClick={runTest} disabled={!activeReadyCount}><Play size={18} />Verarbeitung starten</button>}</div>
         </section>
       </main>
     </div>

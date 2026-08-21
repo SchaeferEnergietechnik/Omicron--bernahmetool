@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -332,11 +333,33 @@ class Worker:
         excel.Application.Run(f"'{workbook_name}'!{macro_name}")
         self.wait(2)
 
-    def refresh_excel(self, excel_path: Path) -> None:
+    def sanitize_filename_part(self, value: str) -> str:
+        return re.sub(r'[\\/:*?"<>|]+', "_", value).strip().strip(".")
+
+    def resolve_project_title(self, workbook, fallback_path: Path) -> str:
+        for sheet_name, cell_name in (("Allgemeine Angaben", "C2"), ("Allgemeine Angaben", "B2"), ("Allgemeine Angaben", "D2")):
+            try:
+                value = workbook.Worksheets(sheet_name).Range(cell_name).Value
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+            except Exception:
+                continue
+        return fallback_path.stem
+
+    def build_output_excel_path(self, source_path: Path, project_title: str) -> Path:
+        date_part = time.strftime("%Y-%m-%d")
+        title = self.sanitize_filename_part(project_title) or source_path.stem
+        candidate = source_path.with_name(f"{title}_{date_part}{source_path.suffix}")
+        if candidate == source_path or not candidate.exists():
+            return candidate
+        return source_path.with_name(f"{title}_{date_part}_{time.strftime('%H%M%S')}{source_path.suffix}")
+
+    def refresh_excel(self, excel_path: Path) -> Path:
         if not excel_path.is_file():
             raise FileNotFoundError(excel_path)
         excel = None
         workbook = None
+        output_path = excel_path
         try:
             excel = win32com.client.DispatchEx("Excel.Application")
             excel.Visible = True
@@ -367,7 +390,12 @@ class Worker:
                 raise RuntimeError(f"Bereichsmakro nicht verfügbar: {last_error}")
             self.run_macro(excel, workbook.Name, MACRO_HIDE_EMPTY_ROWS)
             self.check_cancelled()
-            workbook.Save()
+            project_title = self.resolve_project_title(workbook, excel_path)
+            output_path = self.build_output_excel_path(excel_path, project_title)
+            if output_path == excel_path:
+                workbook.Save()
+            else:
+                workbook.SaveAs(str(output_path.resolve()), FileFormat=workbook.FileFormat)
             workbook.Close(SaveChanges=True)
             workbook = None
         finally:
@@ -375,6 +403,7 @@ class Worker:
                 workbook.Close(SaveChanges=False)
             if excel is not None:
                 excel.Quit()
+        return output_path
 
     def run(self) -> int:
         items = self.job.get("items", [])
@@ -415,18 +444,19 @@ class Worker:
                 # 3. Excel öffnen, Daten importieren, Makros ausführen
                 # 4. Mashup beenden nach Excel-Import (vor nächster Gruppe)
                 for excel_path, occ_paths in excel_groups:
-                    if not occ_paths or not excel_path.is_file():
-                        raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {excel_path}")
+                    working_excel_path = excel_path
+                    if not occ_paths or not working_excel_path.is_file():
+                        raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {working_excel_path}")
 
                     self.terminate_mashup_loader()
                     for occ_path in occ_paths:
-                        self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
+                        self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(working_excel_path))
                         self.export_occ(occ_path)
-                        self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(excel_path))
+                        self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(working_excel_path))
 
-                    self.emit("excel_started", itemId=item_id, excelPath=str(excel_path))
-                    self.refresh_excel(excel_path)
-                    self.emit("excel_completed", itemId=item_id, excelPath=str(excel_path))
+                    self.emit("excel_started", itemId=item_id, excelPath=str(working_excel_path))
+                    working_excel_path = self.refresh_excel(working_excel_path)
+                    self.emit("excel_completed", itemId=item_id, excelPath=str(working_excel_path))
                     
                     self.terminate_mashup_loader()
 
