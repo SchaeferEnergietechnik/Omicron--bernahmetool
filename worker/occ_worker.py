@@ -30,6 +30,7 @@ MACRO_TOGGLE_SECTIONS_CANDIDATES = [
     "Modul1.BereicheEinOderAusblenden_Start",
 ]
 MACRO_HIDE_EMPTY_ROWS = "Tabelle7.ZeilenAusblendenWennLeer"
+DEFAULT_EXPORT_DIRECTORY = Path(r"C:\Omicron_Datenexport")
 
 
 class CancellationRequested(Exception):
@@ -179,6 +180,57 @@ class Worker:
         except Exception as error:
             self.emit("mashup_termination_failed", message=str(error))
 
+    def export_directory(self) -> Path:
+        return Path(self.job.get("exportDirectory", DEFAULT_EXPORT_DIRECTORY))
+
+    def csv_snapshot(self, directory: Path) -> dict[Path, tuple[int, int]]:
+        try:
+            return {
+                file_path: (file_path.stat().st_mtime_ns, file_path.stat().st_size)
+                for file_path in directory.glob("*.csv")
+                if file_path.is_file()
+            }
+        except OSError:
+            return {}
+
+    def wait_for_export_output(
+        self,
+        directory: Path,
+        before_export: dict[Path, tuple[int, int]],
+        started_at_ns: int,
+        timeout: int = 120,
+    ) -> list[Path]:
+        """Bestätigt den Export erst, wenn neue oder geänderte CSV-Dateien stabil sind."""
+        self.emit("occ_export_waiting", exportDirectory=str(directory), timeoutSeconds=timeout)
+        deadline = time.monotonic() + timeout
+        stable_snapshot: dict[Path, tuple[int, int]] | None = None
+        stable_since: float | None = None
+
+        while time.monotonic() < deadline:
+            self.check_cancelled()
+            current = self.csv_snapshot(directory)
+            changed_files = [
+                path for path, signature in current.items()
+                if before_export.get(path) != signature or signature[0] >= started_at_ns
+            ]
+            if changed_files:
+                changed_snapshot = {path: current[path] for path in changed_files}
+                if changed_snapshot == stable_snapshot:
+                    if stable_since is not None and time.monotonic() - stable_since >= 2:
+                        self.emit("occ_export_data_ready", csvFiles=[str(path) for path in changed_files])
+                        return changed_files
+                else:
+                    stable_snapshot = changed_snapshot
+                    stable_since = time.monotonic()
+            else:
+                stable_snapshot = None
+                stable_since = None
+            self.wait(1)
+
+        raise TimeoutError(
+            f"Keine neuen oder aktualisierten CSV-Dateien in {directory} nach {timeout} Sekunden erkannt"
+        )
+
     def export_occ(self, occ_path: Path) -> None:
         if not occ_path.is_file():
             raise FileNotFoundError(occ_path)
@@ -190,9 +242,12 @@ class Worker:
             if not self.open_export_dialog(window):
                 raise RuntimeError("Exportmenü konnte nicht geöffnet werden")
             self.wait(2)
+            export_directory = self.export_directory()
+            before_export = self.csv_snapshot(export_directory)
+            export_started_at_ns = time.time_ns()
             if not self.confirm_export_dialog():
                 raise RuntimeError("Exportdialog konnte nicht bestätigt werden")
-            self.wait(3)
+            self.wait_for_export_output(export_directory, before_export, export_started_at_ns)
         finally:
             self.close_omicron(window)
 
