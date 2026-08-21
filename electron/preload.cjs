@@ -11,4 +11,9 @@ contextBridge.exposeInMainWorld('desktopApi', {
     ipcRenderer.on('worker-event', listener)
     return () => ipcRenderer.removeListener('worker-event', listener)
   },
+  onImportEvent: (callback) => {
+    const listener = (_, event) => callback(event)
+    ipcRenderer.on('import-event', listener)
+    return () => ipcRenderer.removeListener('import-event', listener)
+  },
 })

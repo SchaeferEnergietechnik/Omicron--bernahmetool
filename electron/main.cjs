@@ -23,33 +23,93 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
 }
 
-async function findFolders(root) {
+async function findFolders(root, onProgress) {
   const result = []
-  async function visit(current, relative) {
-    let entries
+  let scannedCount = 0
+  let foundCount = 0
+  let skippedCount = 0
+  const maxWorkers = 8
+  const readDirTimeoutMs = 10000
+  const queue = [{ current: root, relative: path.basename(root) }]
+  let lastProgressSentAt = 0
+
+  function emitProgress(relative, force = false) {
+    const now = Date.now()
+    // Drosseln, damit IPC bei sehr großen Verzeichnisbäumen nicht überläuft.
+    if (!force && now - lastProgressSentAt < 120) return
+    lastProgressSentAt = now
+    onProgress?.({
+      event: 'scan_progress',
+      scannedCount,
+      foundCount,
+      skippedCount,
+      currentPath: relative,
+    })
+  }
+
+  async function readDirWithTimeout(current) {
+    let timer
     try {
-      entries = await fs.readdir(current, { withFileTypes: true })
-    } catch (error) {
-      // Einzelne problematische Pfade (z. B. ENAMETOOLONG im Netzlaufwerk)
-      // sollen den gesamten Cloud-Import nicht abbrechen.
-      console.warn(`[import-cloud] Skip unreadable path: ${current} (${error.message})`)
-      return
-    }
-    const files = entries.filter((entry) => entry.isFile())
-    const occFiles = files.filter((entry) => entry.name.toLowerCase().endsWith('.occ')).map((entry) => entry.name)
-    const excelFiles = files
-      .filter((entry) => /\.xls[xm]$/i.test(entry.name) && !entry.name.startsWith('~$') && !entry.name.toLowerCase().includes('wartung'))
-      .map((entry) => entry.name)
-    if (occFiles.length) result.push({ path: relative, sourcePath: current, occFiles, excelFiles })
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name === 'Protokollentwürfe') continue
-      const nextCurrent = path.join(current, entry.name)
-      const nextRelative = path.join(relative, entry.name)
-      await visit(nextCurrent, nextRelative)
+      const entries = await Promise.race([
+        fs.readdir(current, { withFileTypes: true }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('READDIR_TIMEOUT')), readDirTimeoutMs)
+        }),
+      ])
+      return entries
+    } finally {
+      if (timer) clearTimeout(timer)
     }
   }
-  await visit(root, path.basename(root))
-  return result
+
+  async function workerLoop() {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const task = queue.shift()
+      if (!task) return
+      const { current, relative } = task
+
+      scannedCount += 1
+      emitProgress(relative)
+
+      let entries
+      try {
+        entries = await readDirWithTimeout(current)
+      } catch (error) {
+        // Einzelne problematische Pfade (z. B. ENAMETOOLONG/Timeout im Netzlaufwerk)
+        // sollen den gesamten Cloud-Import nicht abbrechen.
+        skippedCount += 1
+        console.warn(`[import-cloud] Skip unreadable path: ${current} (${error.message})`)
+        emitProgress(relative, true)
+        continue
+      }
+
+      const files = entries.filter((entry) => entry.isFile())
+      const occFiles = files.filter((entry) => entry.name.toLowerCase().endsWith('.occ')).map((entry) => entry.name)
+      const excelFiles = files
+        .filter((entry) => /\.xls[xm]$/i.test(entry.name) && !entry.name.startsWith('~$') && !entry.name.toLowerCase().includes('wartung'))
+        .map((entry) => entry.name)
+
+      if (occFiles.length) {
+        result.push({ path: relative, sourcePath: current, occFiles, excelFiles })
+        foundCount += 1
+        emitProgress(relative, true)
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === 'Protokollentwürfe') continue
+        queue.push({
+          current: path.join(current, entry.name),
+          relative: path.join(relative, entry.name),
+        })
+      }
+    }
+  }
+
+  const workerCount = Math.max(2, Math.min(maxWorkers, queue.length || 1))
+  await Promise.all(Array.from({ length: workerCount }, () => workerLoop()))
+  emitProgress(path.basename(root), true)
+  return { folders: result, scannedCount, foundCount, skippedCount }
 }
 
 async function copyTree(source, destination) {
@@ -67,8 +127,12 @@ ipcMain.handle('choose-directory', async (_, title) => {
   return result.canceled ? null : result.filePaths[0]
 })
 
-ipcMain.handle('import-cloud', async (_, { source, destination }) => {
-  const folders = await findFolders(source)
+ipcMain.handle('import-cloud', async (event, { source, destination }) => {
+  event.sender.send('import-event', { event: 'scan_started' })
+  const scan = await findFolders(source, (progress) => {
+    event.sender.send('import-event', progress)
+  })
+  const folders = scan.folders
   const imported = []
   for (const folder of folders) {
     const relative = path.relative(source, folder.sourcePath)
@@ -81,6 +145,12 @@ ipcMain.handle('import-cloud', async (_, { source, destination }) => {
         : undefined
     imported.push({ ...folder, path: relative || path.basename(source), localPath: target, state: mappingState, message })
   }
+  event.sender.send('import-event', {
+    event: 'scan_completed',
+    scannedCount: scan.scannedCount,
+    foundCount: scan.foundCount,
+    skippedCount: scan.skippedCount,
+  })
   return imported
 })
 
