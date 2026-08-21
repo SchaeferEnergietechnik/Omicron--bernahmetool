@@ -56,6 +56,7 @@ type DirectoryPickerWindow = Window & {
 
 const COMPANY_NAME = 'G.E.S. Energietechnik GmbH'
 const COMPANY_ADDRESS = 'Ferchlipp 16, 39615 Altmärkische Wische'
+const COMPANY_LOGO_SRC = `${import.meta.env.BASE_URL}Logo@4x.png`
 
 function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
   if (excelFiles.length !== 1) return {}
@@ -312,7 +313,7 @@ function App() {
           const enriched: WorkFolder = { ...folder, id: folder.path, selectedExcelByOcc }
           return { ...enriched, state: evaluateFolderState(enriched) }
         }))
-        setNotice(`${imported.length} OCC-Fundordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
+        setNotice(`${imported.length} Verarbeitungsordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
         return
       }
       if (!cloudHandle || !localHandle) {
@@ -326,7 +327,7 @@ function App() {
         return { ...enriched, state: evaluateFolderState(enriched) }
       })
       setFolders(imported)
-      setNotice(`${imported.length} OCC-Fundordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
+      setNotice(`${imported.length} Verarbeitungsordner wurden gefunden. Lokale Kopien werden erst beim Start erstellt.`)
     } catch (error) {
       setNotice(`Der Import konnte nicht abgeschlossen werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
@@ -437,11 +438,10 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#main" aria-label="Omicron Übernahmetool">
-            <img className="brand-logo" src="/Logo@4x.png" alt="Firmenlogo" />
-          <span><strong>Omicron</strong><small>Übernahmetool</small></span>
+            <img className="brand-logo" src={COMPANY_LOGO_SRC} alt="Firmenlogo" />
+          <span><strong>Prüfprotokoll-Übernahme</strong><small>Omicron Workflow</small></span>
         </a>
         <div className="company-meta"><strong>{COMPANY_NAME}</strong><small>{COMPANY_ADDRESS}</small></div>
-        <div className="test-mode"><CircleAlert size={16} /> {window.desktopApi ? 'Windows-Desktopbetrieb' : 'Browservorschau'}</div>
       </header>
 
       <main id="main" className="workspace">
@@ -457,7 +457,7 @@ function App() {
 
         <section className="content">
           <div className="page-heading">
-            <div><span className="eyebrow">Produktivablauf</span><h1>Prüfungsordner bereitstellen</h1><p>OCC-Fundordner aus der Cloud prüfen und erst bei Start lokal bereitstellen.</p></div>
+            <div><h1>Prüfprotokoll-Übernahme</h1><p>Cloud-Ordner prüfen und lokale Verarbeitung starten.</p></div>
             <button className="icon-button" type="button" title="Ansicht zurücksetzen" onClick={reset}><RotateCcw size={18} /><span className="sr-only">Ansicht zurücksetzen</span></button>
           </div>
 

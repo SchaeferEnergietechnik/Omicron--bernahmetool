@@ -257,9 +257,33 @@ class Worker:
         if not occ_path.is_file():
             raise FileNotFoundError(occ_path)
         self.check_cancelled()
-        os.startfile(str(occ_path))
-        self.wait(5)
-        window = self.wait_for_main_window()
+        window = None
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            self.check_cancelled()
+            try:
+                os.startfile(str(occ_path))
+            except Exception as error:
+                last_error = error
+                if attempt == 3:
+                    raise
+                self.wait(2)
+                continue
+
+            self.wait(5 if attempt == 1 else 8)
+            try:
+                window = self.wait_for_main_window(timeout=45)
+                break
+            except ElementNotFoundError as error:
+                last_error = error
+                if attempt == 3:
+                    raise
+                self.emit("occ_open_retry", occPath=str(occ_path), attempt=attempt)
+                self.terminate_mashup_loader()
+                self.wait(2)
+
+        if window is None:
+            raise RuntimeError(f"OCC-Datei konnte nicht geoeffnet werden: {last_error}")
         try:
             if not self.open_export_dialog(window):
                 raise RuntimeError("Exportmenü konnte nicht geöffnet werden")
