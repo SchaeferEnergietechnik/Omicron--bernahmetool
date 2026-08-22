@@ -48,9 +48,9 @@ lokalen Arbeitsordner. Vor der echten Verarbeitung müssen die angezeigten
 Zuordnungen geprüft werden. Während Omicron sichtbar bedient wird, darf die aktive
 Windows-Sitzung nicht anderweitig verwendet werden.
 
-Ordner mit `Protokollentwürfe` oder einem Namensbestandteil `erledigt`
-(Groß-/Kleinschreibung egal) werden beim rekursiven Cloud-Scan einschließlich
-aller Unterordner bewusst übersprungen.
+Ordner mit `Protokollentwürfe`, einem Namensbestandteil `erledigt` oder dem
+Präfix `zz_` werden beim rekursiven Cloud-Scan einschließlich aller Unterordner
+bewusst übersprungen.
 
 ## Entwicklung
 

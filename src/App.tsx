@@ -38,7 +38,7 @@ type DesktopApi = {
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
   onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string }) => void) => () => void
-  onImportEvent: (callback: (event: { event: string; scannedCount?: number; foundCount?: number; currentPath?: string }) => void) => () => void
+  onImportEvent: (callback: (event: { event: string; scannedCount?: number; foundCount?: number; skippedCount?: number; excludedCount?: number; currentPath?: string }) => void) => () => void
 }
 
 declare global {
@@ -58,6 +58,7 @@ type DirectoryPickerWindow = Window & {
 const COMPANY_NAME = 'G.E.S. Energietechnik GmbH'
 const COMPANY_ADDRESS = 'Ferchlipp 16, 39615 Altmärkische Wische'
 const COMPANY_LOGO_SRC = `${import.meta.env.BASE_URL}Logo@4x.png`
+const LARGE_FOLDER_HINT_KEY = 'faber etec - alle projekte'
 
 function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
   if (excelFiles.length !== 1) return {}
@@ -102,7 +103,7 @@ async function discoverWorkFolders(
 
   const shouldSkipDirectory = (name: string) => {
     const lowered = name.toLowerCase()
-    return name === 'Protokollentwürfe' || lowered.includes('erledigt')
+    return lowered === 'protokollentwürfe' || lowered.includes('erledigt') || lowered.startsWith('zz_')
   }
 
   const nested = await Promise.all(
@@ -120,7 +121,8 @@ function App() {
   const [localHandle, setLocalHandle] = useState<DirectoryHandle | null>(null)
   const [folders, setFolders] = useState<WorkFolder[]>([])
   const [isScanning, setIsScanning] = useState(false)
-  const [scanProgress, setScanProgress] = useState({ scannedCount: 0, foundCount: 0, currentPath: '' })
+  const [scanProgress, setScanProgress] = useState({ scannedCount: 0, foundCount: 0, skippedCount: 0, excludedCount: 0, currentPath: '' })
+  const [scanPulse, setScanPulse] = useState(0)
   const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um die Verarbeitung vorzubereiten.')
   const [isRunning, setIsRunning] = useState(false)
   const [skipSectionMacro, setSkipSectionMacro] = useState(() => localStorage.getItem('omicron-skip-section-macro') === '1')
@@ -143,15 +145,28 @@ function App() {
     return () => window.clearInterval(timer)
   }, [isRunning, runStartedAt])
 
+  useEffect(() => {
+    if (!isScanning) {
+      setScanPulse(0)
+      return
+    }
+    const timer = window.setInterval(() => {
+      setScanPulse((current) => (current + 1) % 20)
+    }, 700)
+    return () => window.clearInterval(timer)
+  }, [isScanning])
+
   useEffect(() => window.desktopApi?.onImportEvent((event) => {
     if (event.event === 'scan_started') {
-      setScanProgress({ scannedCount: 0, foundCount: 0, currentPath: '' })
+      setScanProgress({ scannedCount: 0, foundCount: 0, skippedCount: 0, excludedCount: 0, currentPath: '' })
       return
     }
     if (event.event === 'scan_progress') {
       setScanProgress({
         scannedCount: event.scannedCount ?? 0,
         foundCount: event.foundCount ?? 0,
+        skippedCount: event.skippedCount ?? 0,
+        excludedCount: event.excludedCount ?? 0,
         currentPath: event.currentPath ?? '',
       })
       return
@@ -161,6 +176,8 @@ function App() {
         ...current,
         scannedCount: Math.max(current.scannedCount, event.scannedCount ?? current.scannedCount),
         foundCount: Math.max(current.foundCount, event.foundCount ?? current.foundCount),
+        skippedCount: Math.max(current.skippedCount, event.skippedCount ?? current.skippedCount),
+        excludedCount: Math.max(current.excludedCount, event.excludedCount ?? current.excludedCount),
       }))
     }
   }), [])
@@ -334,7 +351,7 @@ function App() {
       setNotice('Bitte wählen Sie zuerst beide Ordner über die Ordnerauswahl aus.')
       return
     }
-    setScanProgress({ scannedCount: 0, foundCount: 0, currentPath: '' })
+    setScanProgress({ scannedCount: 0, foundCount: 0, skippedCount: 0, excludedCount: 0, currentPath: '' })
     setIsScanning(true)
     try {
       if (window.desktopApi) {
@@ -464,7 +481,9 @@ function App() {
   const selectableFolders = folders.filter((folder) => folder.state !== 'fertig')
   const allSelectableEnabled = selectableFolders.length > 0 && selectableFolders.every((folder) => folder.enabled ?? true)
   const activeReadyCount = folders.filter((folder) => (folder.enabled ?? true) && evaluateFolderState(folder) === 'bereit').length
-  const scanProgressPercent = Math.max(6, Math.min(95, Math.round((1 - Math.exp(-scanProgress.scannedCount / 40)) * 100)))
+  const scanActivity = scanProgress.scannedCount + scanProgress.excludedCount + Math.floor(scanPulse * 0.6)
+  const scanProgressPercent = Math.max(6, Math.min(95, Math.round((1 - Math.exp(-scanActivity / 40)) * 100)))
+  const scanningLargeArchive = scanProgress.currentPath.toLowerCase().includes(LARGE_FOLDER_HINT_KEY)
   const progressPercent = progress.total ? Math.round((progress.completed / progress.total) * 100) : 0
 
   return (
@@ -510,7 +529,7 @@ function App() {
               Bereichsmakro überspringen (BereicheEinOderAusblenden_Start)
             </label>
             <div className="action-row"><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche...' : 'Cloud-Ordner prüfen'}</button></div>
-            {isScanning ? <div className="scan-progress"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 12 }}>Cloud-Scan läuft</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{scanProgress.scannedCount} Ordner geprüft · {scanProgress.foundCount} Treffer</span></div><div style={{ height: 8, overflow: 'hidden', marginTop: 8, background: '#dbe8e2', borderRadius: 999 }}><div style={{ width: `${scanProgressPercent}%`, height: '100%', background: 'var(--accent)', borderRadius: 'inherit', transition: 'width .25s ease' }} /></div><div style={{ marginTop: 7, color: 'var(--muted)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{scanProgress.currentPath || 'Ordnerstruktur wird gelesen...'}</div></div> : null}
+            {isScanning ? <div className="scan-progress"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 12 }}>Cloud-Scan läuft</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{scanProgress.scannedCount} Ordner geprüft · {scanProgress.foundCount} Treffer · {scanProgress.excludedCount} ausgeschlossen</span></div><div className="scan-progress-track"><div className="scan-progress-fill" style={{ width: `${scanProgressPercent}%` }} /></div><div style={{ marginTop: 7, color: 'var(--muted)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{scanProgress.currentPath || 'Ordnerstruktur wird gelesen...'}</div>{scanningLargeArchive ? <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 11 }}>Großer Archivbereich erkannt, der Fortschritt aktualisiert sich hier langsamer.</div> : null}</div> : null}
           </section>
 
           <section className="preview" aria-labelledby="preview-heading">

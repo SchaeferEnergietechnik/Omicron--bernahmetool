@@ -28,6 +28,7 @@ async function findFolders(root, onProgress) {
   let scannedCount = 0
   let foundCount = 0
   let skippedCount = 0
+  let excludedCount = 0
   const maxWorkers = 8
   const readDirTimeoutMs = 10000
   const queue = [{ current: root, relative: path.basename(root) }]
@@ -35,7 +36,7 @@ async function findFolders(root, onProgress) {
 
   function shouldSkipDirectory(name) {
     const lowered = name.toLowerCase()
-    return name === 'Protokollentwürfe' || lowered.includes('erledigt')
+    return lowered === 'protokollentwürfe' || lowered.includes('erledigt') || lowered.startsWith('zz_')
   }
 
   function emitProgress(relative, force = false) {
@@ -48,6 +49,7 @@ async function findFolders(root, onProgress) {
       scannedCount,
       foundCount,
       skippedCount,
+      excludedCount,
       currentPath: relative,
     })
   }
@@ -102,7 +104,11 @@ async function findFolders(root, onProgress) {
       }
 
       for (const entry of entries) {
-        if (!entry.isDirectory() || shouldSkipDirectory(entry.name)) continue
+        if (!entry.isDirectory()) continue
+        if (shouldSkipDirectory(entry.name)) {
+          excludedCount += 1
+          continue
+        }
         queue.push({
           current: path.join(current, entry.name),
           relative: path.join(relative, entry.name),
@@ -114,7 +120,7 @@ async function findFolders(root, onProgress) {
   const workerCount = Math.max(2, Math.min(maxWorkers, queue.length || 1))
   await Promise.all(Array.from({ length: workerCount }, () => workerLoop()))
   emitProgress(path.basename(root), true)
-  return { folders: result, scannedCount, foundCount, skippedCount }
+  return { folders: result, scannedCount, foundCount, skippedCount, excludedCount }
 }
 
 async function copyTree(source, destination) {
@@ -155,6 +161,7 @@ ipcMain.handle('import-cloud', async (event, { source, destination }) => {
     scannedCount: scan.scannedCount,
     foundCount: scan.foundCount,
     skippedCount: scan.skippedCount,
+    excludedCount: scan.excludedCount,
   })
   return imported
 })

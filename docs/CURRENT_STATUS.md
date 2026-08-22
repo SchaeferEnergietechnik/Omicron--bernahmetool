@@ -26,10 +26,12 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Native Windows-Ordnerdialoge für Cloud-Quelle und lokalen Arbeitsordner ergänzt.
 - Rekursiver Cloud-Scan und nicht überschreibender lokaler Import in den Desktop-Prozess verlagert.
 - Cloud-Scan optimiert: Ordner mit `erledigt` im Namen werden inklusive Unterordner ausgeschlossen.
+- Cloud-Scan weiter optimiert: Ordner mit Präfix `zz_` werden inklusive Unterordner ausgeschlossen.
 - GUI mit dem separaten Python-Worker, JSON-Lines-Fortschritt und kontrolliertem Abbruch verbunden.
 - Electron-Installer-Konfiguration für einen Windows-NSIS-Build ergänzt.
 - Verarbeitungsschritte im UI sichtbar gemacht: Mashup, OCC-Export, Excel-Bearbeitung, Abschluss.
 - Laufzeit-Timer im UI ergänzt.
+- Scan-Fortschrittsanzeige für große Verzeichnisbäume robuster gemacht (animierter Fortschrittsbalken und Zusatzhinweis bei großen Archivbereichen).
 - Fehlerbericht als JSON-Datei aus dem Worker ergänzt, wenn Fehler oder Skip-Fälle auftreten.
 - Worker-Reihenfolge für Fundordner stabilisiert: OCC-Reihenfolge NAP/sonstige vor EZE.
 - Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.

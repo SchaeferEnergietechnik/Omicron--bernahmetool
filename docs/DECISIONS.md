@@ -104,6 +104,14 @@ Ordner, deren Name den Bestandteil `erledigt` enthält, werden bei der rekursive
 
 Ziel ist eine kürzere Suchlaufzeit und die Vermeidung unnötiger Verarbeitung bereits abgeschlossener Bereiche.
 
+### D-016: Ausschluss von zz_-Ordnern beim Scan
+
+**Status:** entschieden und in Desktop-Scan umgesetzt
+
+Ordner, deren Name mit `zz_` beginnt, werden bei der rekursiven Suche vollständig ausgeschlossen. Der Ausschluss gilt unabhängig von Groß-/Kleinschreibung und umfasst den gesamten Teilbaum inklusive aller Unterordner.
+
+Ziel ist eine kürzere Suchlaufzeit in bekannten Archivbereichen.
+
 ## Offene Entscheidungen
 
 ### O-001: Zuordnung OCC zu Excel
@@ -138,7 +146,7 @@ Die Antwort bestimmt, wie die Automatisierung in einen separaten Prozess ausgela
 
 ### O-007: Scan-Grenzen
 
-**Teilweise geklärt:** `Protokollentwürfe` und Ordner mit Namensbestandteil `erledigt` sind ausgeschlossen.
+**Teilweise geklärt:** `Protokollentwürfe`, Ordner mit Namensbestandteil `erledigt` und Ordner mit Präfix `zz_` sind ausgeschlossen.
 
 **Verbleibende Frage:** Sollen darüber hinaus weitere Ordner, Dateimuster oder Archivbereiche von der rekursiven Suche ausgeschlossen werden?
 
