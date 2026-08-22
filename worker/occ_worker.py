@@ -769,6 +769,11 @@ class Worker:
                 continue
         return fallback_path.stem
 
+    def fallback_title_from_inspector_and_date(self, inspector_name: str | None, exam_date: date | None, source_path: Path) -> str:
+        inspector_part = self.sanitize_filename_part(inspector_name or "Unbekannter_Pruefer")
+        date_part = exam_date.isoformat() if exam_date else "Unbekanntes_Datum"
+        return f"{inspector_part}_{date_part}" if inspector_part else f"{source_path.stem}_{date_part}"
+
     def build_output_excel_path(self, source_path: Path, project_title: str) -> Path:
         date_part = time.strftime("%Y-%m-%d")
         suffix = source_path.suffix
@@ -796,11 +801,19 @@ class Worker:
         excel = None
         workbook = None
         output_path = excel_path
+        inspector_for_fallback: str | None = None
+        exam_date_for_fallback: date | None = None
+        customer_assignment_warning: str | None = None
         try:
             excel = win32com.client.DispatchEx("Excel.Application")
             excel.Visible = True
             excel.DisplayAlerts = False
-            workbook = excel.Workbooks.Open(str(excel_path.resolve()))
+            # Keine interaktiven Link-/Aktualisierungsdialoge in Nachtlaeufen anzeigen.
+            try:
+                excel.AskToUpdateLinks = False
+            except Exception:
+                pass
+            workbook = excel.Workbooks.Open(str(excel_path.resolve()), UpdateLinks=0)
             workbook.RefreshAll()
             timeout = time.monotonic() + 180
             while time.monotonic() < timeout:
@@ -814,9 +827,29 @@ class Worker:
                 pass
             self.wait(5)
 
-            selected_customer = self.resolve_customer_from_terminexcel(excel, workbook, item)
-            workbook.Worksheets(GENERAL_SHEET).Range(CUSTOMER_TARGET_CELL).Value = selected_customer
-            self.emit("customer_assigned", itemId=item.get("id"), customer=selected_customer)
+            try:
+                inspector_for_fallback = self.checked_inspector_from_checkboxes(workbook)
+            except Exception:
+                inspector_for_fallback = None
+            try:
+                checklist_sheet = workbook.Worksheets(CHECKLIST_SHEET)
+                exam_date_for_fallback = self.excel_value_to_date(checklist_sheet.Range(INSPECTOR_DATE_CELL).Value)
+            except Exception:
+                exam_date_for_fallback = None
+
+            try:
+                selected_customer = self.resolve_customer_from_terminexcel(excel, workbook, item)
+                workbook.Worksheets(GENERAL_SHEET).Range(CUSTOMER_TARGET_CELL).Value = selected_customer
+                self.emit("customer_assigned", itemId=item.get("id"), customer=selected_customer)
+            except Exception as error:
+                customer_assignment_warning = str(error)
+                self.emit(
+                    "customer_assignment_skipped",
+                    itemId=item.get("id"),
+                    message=str(error),
+                    inspector=inspector_for_fallback,
+                    examDate=str(exam_date_for_fallback) if exam_date_for_fallback else None,
+                )
 
             workbook.Worksheets(EXCEL_SHEET).Activate()
             self.run_macro(excel, workbook.Name, MACRO_PROTOCOL_NO)
@@ -835,10 +868,30 @@ class Worker:
                     except Exception as error:
                         last_error = error
                 else:
-                    raise RuntimeError(f"Bereichsmakro nicht verfügbar: {last_error}")
-            self.run_macro(excel, workbook.Name, MACRO_HIDE_EMPTY_ROWS)
+                    self.emit(
+                        "excel_macro_warning",
+                        itemId=item.get("id"),
+                        macroCandidates=MACRO_TOGGLE_SECTIONS_CANDIDATES,
+                        message=f"Bereichsmakro nicht verfügbar: {last_error}",
+                    )
+            try:
+                self.run_macro(excel, workbook.Name, MACRO_HIDE_EMPTY_ROWS)
+            except Exception as error:
+                self.emit(
+                    "excel_macro_warning",
+                    itemId=item.get("id"),
+                    macro=MACRO_HIDE_EMPTY_ROWS,
+                    message=f"Makro fehlgeschlagen: {error}",
+                )
             self.check_cancelled()
-            project_title = self.resolve_project_title(workbook, excel_path)
+            if customer_assignment_warning:
+                project_title = self.fallback_title_from_inspector_and_date(
+                    inspector_for_fallback,
+                    exam_date_for_fallback,
+                    excel_path,
+                )
+            else:
+                project_title = self.resolve_project_title(workbook, excel_path)
             output_path = self.build_output_excel_path(excel_path, project_title)
             if output_path == excel_path:
                 workbook.Save()
