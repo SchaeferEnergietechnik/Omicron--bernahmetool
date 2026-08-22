@@ -7,6 +7,14 @@ let mainWindow
 let workerProcess
 let cancelFile
 
+function resolveWorkerPath(overridePath) {
+  if (overridePath) return overridePath
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'worker', 'occ_worker.py')
+  }
+  return path.join(__dirname, '..', 'worker', 'occ_worker.py')
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -190,7 +198,7 @@ ipcMain.handle('run-worker', async (event, { job, workerPath, pythonPath }) => {
   const jobFile = path.join(app.getPath('temp'), `omicron-job-${Date.now()}.json`)
   cancelFile = path.join(app.getPath('temp'), `omicron-cancel-${Date.now()}`)
   await fs.writeFile(jobFile, JSON.stringify(job, null, 2), 'utf8')
-  const resolvedWorkerPath = workerPath || path.join(__dirname, '..', 'worker', 'occ_worker.py')
+  const resolvedWorkerPath = resolveWorkerPath(workerPath)
   workerProcess = spawn(pythonPath || 'python', [resolvedWorkerPath, jobFile, '--cancel-file', cancelFile], { windowsHide: false })
   workerProcess.stdout.on('data', (data) => {
     for (const line of data.toString().split(/\r?\n/).filter(Boolean)) {

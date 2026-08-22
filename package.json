@@ -37,6 +37,7 @@
     "appId": "de.schaeferenergietechnik.omicron-uebernahmetool",
     "productName": "Omicron Übernahmetool",
     "files": ["dist/**/*", "electron/**/*", "worker/**/*", "package.json"],
+    "asarUnpack": ["worker/**"],
     "win": { "target": "nsis" }
   }
 }
