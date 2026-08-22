@@ -694,6 +694,8 @@ class Worker:
             )
             raise RuntimeError(
                 "Kein exakt passender Kunde in Kunden!A1:A35 gefunden. "
+                f"Prüfer={inspector_full_name}, Prüfdatum={exam_date}, "
+                f"Kandidaten aus Terminexcel={raw_customer_candidates}. "
                 "Manuelle Eingabe in Allgemeine Angaben!C2 erforderlich."
             )
         finally:
@@ -811,6 +813,8 @@ class Worker:
         skipped_count = 0
         for index, item in enumerate(items, start=1):
             item_id = item.get("id", str(index))
+            current_excel_path: str | None = None
+            current_occ_path: str | None = None
             try:
                 self.check_cancelled()
                 if not item.get("enabled", True):
@@ -838,17 +842,20 @@ class Worker:
                 # 4. Mashup beenden nach Excel-Import (vor nächster Gruppe)
                 for excel_path, occ_paths in excel_groups:
                     working_excel_path = excel_path
+                    current_excel_path = str(working_excel_path)
                     if not occ_paths or not working_excel_path.is_file():
                         raise FileNotFoundError(f"OCC- oder Excel-Datei fehlt für Zuordnung: {working_excel_path}")
 
                     self.terminate_mashup_loader()
                     for occ_path in occ_paths:
+                        current_occ_path = str(occ_path)
                         self.emit("occ_started", itemId=item_id, occPath=str(occ_path), excelPath=str(working_excel_path))
                         self.export_occ(occ_path)
                         self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(working_excel_path))
 
                     self.emit("excel_started", itemId=item_id, excelPath=str(working_excel_path))
                     working_excel_path = self.refresh_excel(working_excel_path, item)
+                    current_excel_path = str(working_excel_path)
                     self.emit("excel_completed", itemId=item_id, excelPath=str(working_excel_path))
                     
                     self.terminate_mashup_loader()
@@ -859,9 +866,20 @@ class Worker:
                 self.emit("run_cancelled", itemId=item_id, elapsedSeconds=self.elapsed_seconds())
                 return 2
             except Exception as error:
-                self.emit("item_failed", itemId=item_id, message=str(error))
+                self.emit(
+                    "item_failed",
+                    itemId=item_id,
+                    message=str(error),
+                    excelPath=current_excel_path,
+                    occPath=current_occ_path,
+                )
                 failed_count += 1
-                self.failures.append({"itemId": str(item_id), "message": str(error)})
+                failure_entry: dict[str, str] = {"itemId": str(item_id), "message": str(error)}
+                if current_excel_path:
+                    failure_entry["excelPath"] = current_excel_path
+                if current_occ_path:
+                    failure_entry["occPath"] = current_occ_path
+                self.failures.append(failure_entry)
 
         report_path = None
         try:
