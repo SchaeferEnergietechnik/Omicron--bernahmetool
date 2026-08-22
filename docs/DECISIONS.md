@@ -68,7 +68,8 @@ Die Kundenzelle `C2` besitzt bereits eine Dropdown-Liste mit der Quelle `Kunden!
 
 Für die Umsetzung gilt:
 
-- Kundentreffer werden exakt gegen `Kunden!A1:A35` verglichen.
+- Kundentreffer werden gegen `Kunden!A1:A35` mit Teilwortabgleich verglichen.
+- Rechtsform- und Füllwörter (zum Beispiel `gmbh`, `ag`, `kg`, `co`, `und`) werden beim Teilwortabgleich ignoriert.
 - Der Datumsvergleich erfolgt ohne Uhrzeitanteil.
 - Bei mehreren Treffern wird eine manuelle Auswahl verlangt.
 - Bei keinem Treffer wird eine manuelle Eingabe verlangt.

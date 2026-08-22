@@ -36,7 +36,7 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Worker-Reihenfolge für Fundordner stabilisiert: OCC-Reihenfolge NAP/sonstige vor EZE.
 - Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.
 - Manuelle Zuordnung OCC -> Excel in der GUI vor Verarbeitungsstart ergänzt.
-- Terminexcel-Kundenauflösung im Worker integriert (exakter Kundenlistenabgleich, Datumsvergleich ohne Uhrzeit, interne Begriffe gefiltert).
+- Terminexcel-Kundenauflösung im Worker integriert (Teilwortabgleich gegen Kundenliste mit Stopwort-Filter, Datumsvergleich ohne Uhrzeit, interne Begriffe gefiltert).
 
 - **Worker-Integration (neu):** Python-Worker führt alle drei erforderlichen Excel-Makros aus:
   - `Tabelle1.Protokollnummer_generieren_unsichtbar` (Protokollnummer-Generierung)

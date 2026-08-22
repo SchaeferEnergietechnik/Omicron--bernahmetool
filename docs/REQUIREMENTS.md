@@ -33,7 +33,7 @@
 | F-027 | Das Tool liest das Prüfdatum aus `Schutzprüf-Checkliste!B7`. | Muss |
 | F-028 | Das Tool sucht in der Terminexcel nach der Kombination aus Prüfer und Prüfdatum. | Muss |
 | F-029 | Bei genau einem Termin liest das Tool den Wert aus der Spalte `Kunde`. | Muss |
-| F-030 | Der gelesene Kunde wird gegen die Liste `Kunden!A1:A35` der Prüfdaten-Arbeitsmappe abgeglichen. | Muss |
+| F-030 | Der gelesene Kunde wird gegen die Liste `Kunden!A1:A35` der Prüfdaten-Arbeitsmappe abgeglichen; dabei reicht mindestens ein sinnvolles Teilwort und generische Rechtsform-/Füllwörter (z. B. `gmbh`, `ag`, `kg`, `co`, `und`) werden ignoriert. | Muss |
 | F-031 | Bei eindeutigem Abgleich schreibt das Tool den vollständigen Kundeneintrag nach `Allgemeine Angaben!C2`. | Muss |
 | F-032 | Kein oder mehrere Termin- beziehungsweise Kundentreffer erfordern eine sichtbare Benutzerentscheidung. | Muss |
 | F-033 | Die Terminexcel wird unter `Y:\GES Energietechnik\Termine.xlsx` gelesen. | Muss |

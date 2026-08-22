@@ -142,7 +142,8 @@ Vor der Excel-Nachverarbeitung:
 Dabei gilt:
 
 - Der Datumsvergleich erfolgt ohne Uhrzeitanteil.
-- Der Kundenabgleich gegen `Kunden!A1:A35` erfolgt exakt.
+- Der Kundenabgleich gegen `Kunden!A1:A35` erfolgt per Teilwortabgleich.
+- Rechtsform- und Füllwörter (zum Beispiel `gmbh`, `ag`, `kg`, `co`, `und`) werden dabei ignoriert.
 - Interne oder Abwesenheitseinträge wie `urlaub`, `elternzeit`, `intern`, `ges intern`, `schulung`, `krank`, `büro`, `homeoffice` werden nicht automatisch übernommen.
 
 Die Kundenzuordnung muss vor `Protokollnummer_generieren_unsichtbar` erfolgen, weil dieses Makro den Kunden aus `Allgemeine Angaben!C2` in die zentrale Protokollübersicht übernimmt.

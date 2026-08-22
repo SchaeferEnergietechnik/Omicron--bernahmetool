@@ -289,11 +289,11 @@ function App() {
           ...folder,
           customerResolution: 'manual-required',
           customerCandidates: candidates,
-          message: `Kein exakter Kundentreffer für ${event.inspector ?? 'Prüfer'} am ${event.examDate ?? 'Datum'}. Bitte Kunde manuell eintragen.`,
+          message: `Kein passender Kundentreffer für ${event.inspector ?? 'Prüfer'} am ${event.examDate ?? 'Datum'}. Bitte Kunde manuell eintragen.`,
         }
         return { ...updated, state: evaluateFolderState(updated) }
       }))
-      setNotice('Kein exakter Kundentreffer gefunden. Bitte Kundenname manuell in der Vorschau eintragen und den Lauf erneut starten.')
+      setNotice('Kein passender Kundentreffer gefunden. Bitte Kundenname manuell in der Vorschau eintragen und den Lauf erneut starten.')
       return
     }
     if (event.event === 'item_failed') {
