@@ -1,8 +1,15 @@
 # Projektstand
 
-**Stand:** 21. August 2026, 20:24 Uhr  
+**Stand:** 22. August 2026, 00:00 Uhr  
 **Status:** Electron-Desktop-GUI, nativer Cloud-Import, Python-Worker mit vollständiger Excel-Makro-Integration, manuelle OCC-zu-Excel-Zuordnung, sichtbare Schrittanzeige und robuster Nachtlauf sind lauffähig.  
-**Letzter Commit:** `0c0db14` – Update occ_worker.py (56 Zeilen Ergänzung)
+**Letzter Commit:** `21de035` – Align docs and UI with relaxed customer matching
+
+## Sicherung und Dokumentation (22.08.2026)
+
+- Technischer Sicherungsstand auf `main`: `21de035`
+- Fachliche Änderung Kundenzuordnung (Teilwortabgleich mit Stopwort-Filter): `d41eb95`
+- Konsistenzanpassungen Doku und UI-Texte: `21de035`
+- Wiederherstellung auf diesen Stand ist jederzeit per Git-Checkout der Commit-ID oder über den zugehörigen Tag möglich.
 
 ## Ziel
 
