@@ -19,6 +19,7 @@ Die ausführliche Beschreibung liegt unter:
 - [Analyse der Terminexcel](docs/TERMINEXCEL_ANALYSIS.md)
 - [VBA-Anpassung für V19m](docs/V19M_VBA_MIGRATION.md)
 - [Release 2026-08-22](docs/RELEASE_2026-08-22.md)
+- [Windows Release Checklist](docs/WINDOWS_RELEASE_CHECKLIST.md)
 
 ## Aktueller Stand
 
