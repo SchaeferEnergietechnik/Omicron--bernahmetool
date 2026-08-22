@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('desktopApi', {
   importCloud: (source, destination) => ipcRenderer.invoke('import-cloud', { source, destination }),
   prepareLocalFolders: (folders) => ipcRenderer.invoke('prepare-local-folders', { folders }),
   runWorker: (job, workerPath, pythonPath) => ipcRenderer.invoke('run-worker', { job, workerPath, pythonPath }),
+  shutdownComputer: () => ipcRenderer.invoke('shutdown-computer'),
   cancelWorker: () => ipcRenderer.invoke('cancel-worker'),
   onWorkerEvent: (callback) => {
     const listener = (_, event) => callback(event)

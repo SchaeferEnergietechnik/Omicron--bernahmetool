@@ -217,6 +217,21 @@ ipcMain.handle('cancel-worker', async () => {
   if (cancelFile) await fs.writeFile(cancelFile, 'cancel', 'utf8')
 })
 
+ipcMain.handle('shutdown-computer', async () => {
+  if (process.platform !== 'win32') {
+    throw new Error('Automatisches Herunterfahren wird nur unter Windows unterstützt.')
+  }
+
+  const delaySeconds = 60
+  const child = spawn('shutdown', ['/s', '/t', String(delaySeconds)], {
+    windowsHide: true,
+    detached: true,
+    stdio: 'ignore',
+  })
+  child.unref()
+  return { scheduled: true, delaySeconds }
+})
+
 app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

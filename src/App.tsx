@@ -40,6 +40,7 @@ type DesktopApi = {
   importCloud: (source: string, destination: string) => Promise<Array<WorkFolder & { sourcePath: string }>>
   prepareLocalFolders: (folders: Array<{ id: string; path: string; sourcePath: string; localPath: string }>) => Promise<Array<{ id: string; localPath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
+  shutdownComputer: () => Promise<{ scheduled: boolean; delaySeconds: number }>
   cancelWorker: () => Promise<void>
   onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string; inspector?: string; examDate?: string; customer?: string; options?: string[]; candidates?: string[] }) => void) => () => void
   onImportEvent: (callback: (event: { event: string; scannedCount?: number; foundCount?: number; skippedCount?: number; excludedCount?: number; currentPath?: string }) => void) => () => void
@@ -141,6 +142,7 @@ function App() {
   const [notice, setNotice] = useState('Wählen Sie Cloud-Quelle und lokalen Arbeitsordner, um die Verarbeitung vorzubereiten.')
   const [isRunning, setIsRunning] = useState(false)
   const [skipSectionMacro, setSkipSectionMacro] = useState(() => localStorage.getItem('omicron-skip-section-macro') === '1')
+  const [shutdownAfterRun, setShutdownAfterRun] = useState(() => localStorage.getItem('omicron-shutdown-after-run') === '1')
   const [progress, setProgress] = useState({ completed: 0, total: 0, current: '', detail: '' })
   const [currentStep, setCurrentStep] = useState('Vorbereitung')
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
@@ -538,7 +540,16 @@ function App() {
     try {
       await window.desktopApi.prepareLocalFolders(copyPlan)
       setProgress((current) => ({ ...current, detail: 'Worker wird gestartet' }))
-      await window.desktopApi.runWorker({ items, reportPath, skipSectionMacro }, '')
+      const exitCode = await window.desktopApi.runWorker({ items, reportPath, skipSectionMacro }, '')
+      if (shutdownAfterRun && exitCode !== 2) {
+        try {
+          const result = await window.desktopApi.shutdownComputer()
+          setNotice((current) => `${current} Rechnerabschaltung geplant in ${result.delaySeconds} Sekunden.`)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unbekannter Fehler'
+          setNotice((current) => `${current} Rechner konnte nicht heruntergefahren werden: ${message}`)
+        }
+      }
     } catch (error) {
       setNotice(`Worker konnte nicht gestartet werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
@@ -560,6 +571,11 @@ function App() {
   function toggleSkipSectionMacro(value: boolean) {
     setSkipSectionMacro(value)
     localStorage.setItem('omicron-skip-section-macro', value ? '1' : '0')
+  }
+
+  function toggleShutdownAfterRun(value: boolean) {
+    setShutdownAfterRun(value)
+    localStorage.setItem('omicron-shutdown-after-run', value ? '1' : '0')
   }
 
   const readyCount = folders.filter((folder) => folder.state === 'bereit').length
@@ -627,6 +643,15 @@ function App() {
                 disabled={isRunning}
               />
               Bereichsmakro überspringen (BereicheEinOderAusblenden_Start)
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 10, color: 'var(--muted)', fontSize: 12 }}>
+              <input
+                type="checkbox"
+                checked={shutdownAfterRun}
+                onChange={(event) => toggleShutdownAfterRun(event.target.checked)}
+                disabled={isRunning}
+              />
+              Nach Beendigung Rechner herunterfahren
             </label>
             <div className="action-row"><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche...' : 'Cloud-Ordner prüfen'}</button></div>
             {isScanning ? <div className="scan-progress"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 12 }}>Cloud-Scan läuft</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{scanProgress.scannedCount} Ordner geprüft · {scanProgress.foundCount} Treffer · {scanProgress.excludedCount} ausgeschlossen</span></div><div className="scan-progress-track"><div className="scan-progress-fill" style={{ width: `${scanProgressPercent}%` }} /></div><div style={{ marginTop: 7, color: 'var(--muted)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{scanProgress.currentPath || 'Ordnerstruktur wird gelesen...'}</div>{scanningLargeArchive ? <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 11 }}>Großer Archivbereich erkannt, der Fortschritt aktualisiert sich hier langsamer.</div> : null}</div> : null}
