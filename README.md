@@ -18,6 +18,7 @@ Die ausführliche Beschreibung liegt unter:
 - [Analyse des bestehenden Python-Programms](docs/LEGACY_ANALYSIS.md)
 - [Analyse der Terminexcel](docs/TERMINEXCEL_ANALYSIS.md)
 - [VBA-Anpassung für V19m](docs/V19M_VBA_MIGRATION.md)
+- [Release 2026-08-22](docs/RELEASE_2026-08-22.md)
 
 ## Aktueller Stand
 
@@ -34,6 +35,24 @@ Control Center, Excel und Python 3.10 oder neuer benötigt.
 npm install
 npm run desktop
 ```
+
+### EXE erstellen
+
+Windows-Setup (NSIS):
+
+```powershell
+npm install
+npm run desktop:dist
+```
+
+Hinweis: In headless Linux-Containern kann das NSIS-Setup wegen fehlender GUI/Wine-Umgebung fehlschlagen. Als lauffaehige Alternative kann eine portable EXE gebaut werden:
+
+```bash
+npm install
+npx electron-builder --win portable
+```
+
+Ausgabe typischerweise unter `dist/Omicron Uebernahmetool 0.0.0.exe`.
 
 Für den Worker müssen die Python-Abhängigkeiten installiert sein:
 
