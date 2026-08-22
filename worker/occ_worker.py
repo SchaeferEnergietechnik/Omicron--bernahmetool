@@ -95,6 +95,29 @@ INTERNAL_TERM_KEYWORDS = (
     "homeoffice",
 )
 
+CUSTOMER_MATCH_STOPWORDS = {
+    "gmbh",
+    "mbh",
+    "ag",
+    "kg",
+    "kgaa",
+    "gbr",
+    "ug",
+    "haftungsbeschraenkt",
+    "co",
+    "und",
+    "the",
+    "der",
+    "die",
+    "das",
+    "ein",
+    "eine",
+    "einer",
+    "einem",
+    "einen",
+    "&",
+}
+
 
 class CancellationRequested(Exception):
     """Raised at safe boundaries after the GUI writes the cancellation file."""
@@ -597,6 +620,32 @@ class Worker:
         normalized = self.normalize_text(value)
         return any(keyword in normalized for keyword in INTERNAL_TERM_KEYWORDS)
 
+    def customer_keywords(self, value: str) -> set[str]:
+        normalized = self.normalize_text(value)
+        tokens = re.findall(r"[a-z0-9]+", normalized)
+        return {
+            token
+            for token in tokens
+            if len(token) >= 3 and token not in CUSTOMER_MATCH_STOPWORDS
+        }
+
+    def matching_customers_from_list(self, raw_customer: str, customers: list[str]) -> list[str]:
+        normalized_raw = self.normalize_text(raw_customer)
+        raw_keywords = self.customer_keywords(raw_customer)
+        matches: list[str] = []
+
+        for customer in customers:
+            normalized_customer = self.normalize_text(customer)
+            if normalized_customer == normalized_raw:
+                matches.append(customer)
+                continue
+
+            customer_keywords = self.customer_keywords(customer)
+            if raw_keywords and customer_keywords and raw_keywords.intersection(customer_keywords):
+                matches.append(customer)
+
+        return matches
+
     def find_inspector_header_column(self, header_row: tuple[Any, ...], inspector_full_name: str) -> int:
         normalized_target = self.normalize_text(inspector_full_name)
         for index, value in enumerate(header_row, start=1):
@@ -660,7 +709,11 @@ class Worker:
                     continue
                 raw_customer_candidates.append(customer_text)
 
-            exact_customer_candidates = [value for value in raw_customer_candidates if value in customers]
+            matched_customer_candidates: list[str] = []
+            for raw_customer in raw_customer_candidates:
+                matched_customer_candidates.extend(
+                    self.matching_customers_from_list(raw_customer, customers)
+                )
 
             # Optionaler manueller Override pro Item (z. B. aus späterer GUI-Auswahl).
             manual_customer = str(item.get("manualCustomer", "")).strip()
@@ -669,7 +722,7 @@ class Worker:
                     raise RuntimeError(f"Manueller Kunde nicht in Kundenliste A1:A35: {manual_customer}")
                 return manual_customer
 
-            unique_candidates = list(dict.fromkeys(exact_customer_candidates))
+            unique_candidates = list(dict.fromkeys(matched_customer_candidates))
             if len(unique_candidates) == 1:
                 return unique_candidates[0]
             if len(unique_candidates) > 1:
@@ -693,7 +746,7 @@ class Worker:
                 candidates=raw_customer_candidates,
             )
             raise RuntimeError(
-                "Kein exakt passender Kunde in Kunden!A1:A35 gefunden. "
+                "Kein passender Kunde per Teilwortabgleich in Kunden!A1:A35 gefunden. "
                 f"Prüfer={inspector_full_name}, Prüfdatum={exam_date}, "
                 f"Kandidaten aus Terminexcel={raw_customer_candidates}. "
                 "Manuelle Eingabe in Allgemeine Angaben!C2 erforderlich."
