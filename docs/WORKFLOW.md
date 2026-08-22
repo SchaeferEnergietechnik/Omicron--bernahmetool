@@ -136,7 +136,14 @@ Vor der Excel-Nachverarbeitung:
 4. Bei genau einem Treffer den Wert der Spalte `Kunde` lesen.
 5. Den Wert mit der Kundenliste `Kunden!A1:A35` der Prüfdaten-Arbeitsmappe abgleichen.
 6. Den eindeutigen vollständigen Kundeneintrag nach `Allgemeine Angaben!C2` schreiben.
-7. Bei keinem oder mehreren Treffern die Verarbeitung anhalten und eine Auswahl verlangen.
+7. Bei mehreren Treffern die Verarbeitung anhalten und eine manuelle Auswahl verlangen.
+8. Bei keinem Treffer die Verarbeitung anhalten und eine manuelle Eingabe verlangen.
+
+Dabei gilt:
+
+- Der Datumsvergleich erfolgt ohne Uhrzeitanteil.
+- Der Kundenabgleich gegen `Kunden!A1:A35` erfolgt exakt.
+- Interne oder Abwesenheitseinträge wie `urlaub`, `elternzeit`, `intern`, `ges intern`, `schulung`, `krank`, `büro`, `homeoffice` werden nicht automatisch übernommen.
 
 Die Kundenzuordnung muss vor `Protokollnummer_generieren_unsichtbar` erfolgen, weil dieses Makro den Kunden aus `Allgemeine Angaben!C2` in die zentrale Protokollübersicht übernimmt.
 

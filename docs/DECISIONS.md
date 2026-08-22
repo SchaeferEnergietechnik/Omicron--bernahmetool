@@ -60,11 +60,19 @@ Der Marker `EZE` dient in diesem Fall der Unterscheidung der Stationen beziehung
 
 ### D-009: Kundenzuordnung über Prüfer und Prüfdatum
 
-**Status:** Zielablauf bestätigt, technische Details der Terminexcel offen
+**Status:** entschieden
 
 Das Tool soll den angehakten Prüfer aus Zeile 5 des Blatts `Schutzprüf-Checkliste` und das Prüfdatum aus Zelle `B7` lesen. Mit Prüfer und Datum sucht es den passenden Termin in der Terminexcel. Aus der Spalte `Kunde` übernimmt es den Kunden in `Allgemeine Angaben!C2` der Prüfdaten-Arbeitsmappe.
 
 Die Kundenzelle `C2` besitzt bereits eine Dropdown-Liste mit der Quelle `Kunden!A1:A35`. Der aus der Terminexcel gelesene Kunde soll deshalb gegen diese Liste abgeglichen und als vorhandener vollständiger Listeneintrag geschrieben werden. Bei keinem oder mehreren Treffern ist vor dem Schreiben eine Benutzerentscheidung erforderlich.
+
+Für die Umsetzung gilt:
+
+- Kundentreffer werden exakt gegen `Kunden!A1:A35` verglichen.
+- Der Datumsvergleich erfolgt ohne Uhrzeitanteil.
+- Bei mehreren Treffern wird eine manuelle Auswahl verlangt.
+- Bei keinem Treffer wird eine manuelle Eingabe verlangt.
+- Interne oder Abwesenheitseinträge werden ausgeschlossen, mindestens mit den Schlüsselwörtern `urlaub`, `elternzeit`, `intern`, `ges intern`, `schulung`, `krank`, `büro`, `homeoffice`.
 
 ### D-010: Speicherbereich der Terminexcel
 
@@ -155,9 +163,7 @@ Die Antwort bestimmt, wie die Automatisierung in einen separaten Prozess ausgela
 **Fragen:**
 
 - Wie werden neu hinzukommende Prüfer dauerhaft in der Alias-Tabelle gepflegt?
-- Wie wird entschieden, wenn ein Prüfer am selben Tag mehrere Kundentermine hat?
-- Enthält die Spalte `Kunde` exakt den Eintrag aus `Kunden!A1:A35` oder nur einen verkürzten Kundennamen?
-- Wie sollen interne Termine, Urlaub, Elternzeit und freie Tage behandelt werden?
+- Wie werden zusätzliche Ausschluss-Schlüsselwörter für interne Einträge zukünftig gepflegt?
 
 ## Entscheidungsformat
 

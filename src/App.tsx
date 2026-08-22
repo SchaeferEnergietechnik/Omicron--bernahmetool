@@ -29,6 +29,10 @@ type WorkFolder = {
   localPath?: string
   message?: string
   selectedExcelByOcc?: Record<string, string>
+  customerResolution?: 'none' | 'selection-required' | 'manual-required'
+  customerOptions?: string[]
+  customerCandidates?: string[]
+  manualCustomer?: string
 }
 
 type DesktopApi = {
@@ -37,7 +41,7 @@ type DesktopApi = {
   prepareLocalFolders: (folders: Array<{ id: string; path: string; sourcePath: string; localPath: string }>) => Promise<Array<{ id: string; localPath: string }>>
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   cancelWorker: () => Promise<void>
-  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string }) => void) => () => void
+  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string; inspector?: string; examDate?: string; customer?: string; options?: string[]; candidates?: string[] }) => void) => () => void
   onImportEvent: (callback: (event: { event: string; scannedCount?: number; foundCount?: number; skippedCount?: number; excludedCount?: number; currentPath?: string }) => void) => () => void
 }
 
@@ -69,6 +73,17 @@ function initSelectedExcelByOcc(occFiles: string[], excelFiles: string[]) {
 function evaluateFolderState(folder: WorkFolder): FolderState {
   if (folder.state === 'fertig') return 'fertig'
   if (!(folder.enabled ?? true)) return 'bereit'
+
+  const customerResolution = folder.customerResolution ?? 'none'
+  if (customerResolution === 'selection-required') {
+    const selected = folder.manualCustomer?.trim() ?? ''
+    const options = folder.customerOptions ?? []
+    if (!selected || !options.includes(selected)) return 'konflikt'
+  }
+  if (customerResolution === 'manual-required') {
+    if (!(folder.manualCustomer?.trim())) return 'konflikt'
+  }
+
   if (folder.excelFiles.length === 0) return 'konflikt'
   if (folder.excelFiles.length === 1) return 'bereit'
 
@@ -221,8 +236,65 @@ function App() {
     }
     if (event.event === 'item_completed') {
       setCurrentStep('Abschluss')
-      setFolders((current) => current.map((folder) => folder.id === event.itemId ? { ...folder, state: 'fertig' } : folder))
+      setFolders((current) => current.map((folder) => folder.id === event.itemId
+        ? {
+            ...folder,
+            state: 'fertig',
+            customerResolution: 'none',
+            customerOptions: undefined,
+            customerCandidates: undefined,
+            message: undefined,
+          }
+        : folder))
       setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag erfolgreich abgeschlossen' }))
+    }
+    if (event.event === 'customer_assigned') {
+      if (!event.itemId) return
+      setFolders((current) => current.map((folder) => {
+        if (folder.id !== event.itemId) return folder
+        const updated: WorkFolder = {
+          ...folder,
+          customerResolution: 'none',
+          customerOptions: undefined,
+          customerCandidates: undefined,
+          message: event.customer ? `Kunde gesetzt: ${event.customer}` : folder.message,
+        }
+        return { ...updated, state: evaluateFolderState(updated) }
+      }))
+      return
+    }
+    if (event.event === 'customer_selection_required') {
+      if (!event.itemId) return
+      const options = Array.isArray(event.options) ? event.options : []
+      setFolders((current) => current.map((folder) => {
+        if (folder.id !== event.itemId) return folder
+        const updated: WorkFolder = {
+          ...folder,
+          customerResolution: 'selection-required',
+          customerOptions: options,
+          customerCandidates: options,
+          message: `Mehrere Kunden für ${event.inspector ?? 'Prüfer'} am ${event.examDate ?? 'Datum'} gefunden. Bitte Auswahl treffen.`,
+        }
+        return { ...updated, state: evaluateFolderState(updated) }
+      }))
+      setNotice('Mehrere Kundentreffer gefunden. Bitte in der Vorschau einen Kunden auswählen und den Lauf erneut starten.')
+      return
+    }
+    if (event.event === 'customer_manual_required') {
+      if (!event.itemId) return
+      const candidates = Array.isArray(event.candidates) ? event.candidates : []
+      setFolders((current) => current.map((folder) => {
+        if (folder.id !== event.itemId) return folder
+        const updated: WorkFolder = {
+          ...folder,
+          customerResolution: 'manual-required',
+          customerCandidates: candidates,
+          message: `Kein exakter Kundentreffer für ${event.inspector ?? 'Prüfer'} am ${event.examDate ?? 'Datum'}. Bitte Kunde manuell eintragen.`,
+        }
+        return { ...updated, state: evaluateFolderState(updated) }
+      }))
+      setNotice('Kein exakter Kundentreffer gefunden. Bitte Kundenname manuell in der Vorschau eintragen und den Lauf erneut starten.')
+      return
     }
     if (event.event === 'item_failed') {
       setCurrentStep('Fehlerbehandlung')
@@ -270,6 +342,20 @@ function App() {
       const updated: WorkFolder = {
         ...folder,
         selectedExcelByOcc: nextMapping,
+      }
+      return {
+        ...updated,
+        state: evaluateFolderState(updated),
+      }
+    }))
+  }
+
+  function setManualCustomer(folderId: string, customer: string) {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId || folder.state === 'fertig' || !(folder.enabled ?? true)) return folder
+      const updated: WorkFolder = {
+        ...folder,
+        manualCustomer: customer,
       }
       return {
         ...updated,
@@ -424,6 +510,7 @@ function App() {
 
     const items = processingFolders.map((folder) => ({
       enabled: folder.enabled ?? true,
+      ...(folder.manualCustomer?.trim() ? { manualCustomer: folder.manualCustomer.trim() } : {}),
       ...(folder.excelFiles.length === 1
         ? {
             id: folder.id,
@@ -481,6 +568,19 @@ function App() {
   const selectableFolders = folders.filter((folder) => folder.state !== 'fertig')
   const allSelectableEnabled = selectableFolders.length > 0 && selectableFolders.every((folder) => folder.enabled ?? true)
   const activeReadyCount = folders.filter((folder) => (folder.enabled ?? true) && evaluateFolderState(folder) === 'bereit').length
+  const unresolvedCustomerFolders = folders.filter((folder) => {
+    if (!(folder.enabled ?? true)) return false
+    const mode = folder.customerResolution ?? 'none'
+    if (mode === 'selection-required') {
+      const selected = folder.manualCustomer?.trim() ?? ''
+      const options = folder.customerOptions ?? []
+      return !selected || !options.includes(selected)
+    }
+    if (mode === 'manual-required') {
+      return !(folder.manualCustomer?.trim())
+    }
+    return false
+  })
   const scanActivity = scanProgress.scannedCount + scanProgress.excludedCount + Math.floor(scanPulse * 0.6)
   const scanProgressPercent = Math.max(6, Math.min(95, Math.round((1 - Math.exp(-scanActivity / 40)) * 100)))
   const scanningLargeArchive = scanProgress.currentPath.toLowerCase().includes(LARGE_FOLDER_HINT_KEY)
@@ -530,6 +630,7 @@ function App() {
             </label>
             <div className="action-row"><button className="primary-button" type="button" onClick={importCloudFolders} disabled={isScanning}>{isScanning ? <LoaderCircle className="spin" size={18} /> : <Copy size={18} />}{isScanning ? 'Durchsuche...' : 'Cloud-Ordner prüfen'}</button></div>
             {isScanning ? <div className="scan-progress"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ color: 'var(--accent-dark)', fontSize: 12 }}>Cloud-Scan läuft</strong><span style={{ color: 'var(--muted)', fontSize: 11 }}>{scanProgress.scannedCount} Ordner geprüft · {scanProgress.foundCount} Treffer · {scanProgress.excludedCount} ausgeschlossen</span></div><div className="scan-progress-track"><div className="scan-progress-fill" style={{ width: `${scanProgressPercent}%` }} /></div><div style={{ marginTop: 7, color: 'var(--muted)', fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{scanProgress.currentPath || 'Ordnerstruktur wird gelesen...'}</div>{scanningLargeArchive ? <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 11 }}>Großer Archivbereich erkannt, der Fortschritt aktualisiert sich hier langsamer.</div> : null}</div> : null}
+            {unresolvedCustomerFolders.length ? <div style={{ marginTop: 12, padding: 12, background: '#fff9ed', border: '1px solid #ecd79b', borderRadius: 6 }}><strong style={{ display: 'block', color: '#7a5a12', fontSize: 12 }}>Kundenzuordnung erforderlich</strong><div style={{ marginTop: 8, display: 'grid', gap: 10 }}>{unresolvedCustomerFolders.map((folder) => <div key={`customer-${folder.id}`} style={{ display: 'grid', gap: 6 }}><span style={{ color: 'var(--ink)', fontSize: 12, fontWeight: 600 }}>{folder.path}</span>{folder.customerResolution === 'selection-required' ? <select value={folder.manualCustomer ?? ''} onChange={(event) => setManualCustomer(folder.id, event.target.value)} disabled={isRunning} style={{ maxWidth: 420, padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }}><option value="">Kunde auswählen...</option>{(folder.customerOptions ?? []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type="text" value={folder.manualCustomer ?? ''} onChange={(event) => setManualCustomer(folder.id, event.target.value)} disabled={isRunning} placeholder="Kundenname exakt wie in Kunden!A1:A35" style={{ maxWidth: 420, padding: '6px 8px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff' }} />}{folder.customerCandidates?.length ? <small style={{ color: 'var(--muted)', fontSize: 11 }}>Terminexcel-Kandidaten: {folder.customerCandidates.join(' · ')}</small> : null}</div>)}</div></div> : null}
           </section>
 
           <section className="preview" aria-labelledby="preview-heading">

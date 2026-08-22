@@ -36,6 +36,7 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Worker-Reihenfolge für Fundordner stabilisiert: OCC-Reihenfolge NAP/sonstige vor EZE.
 - Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.
 - Manuelle Zuordnung OCC -> Excel in der GUI vor Verarbeitungsstart ergänzt.
+- Terminexcel-Kundenauflösung im Worker integriert (exakter Kundenlistenabgleich, Datumsvergleich ohne Uhrzeit, interne Begriffe gefiltert).
 
 - **Worker-Integration (neu):** Python-Worker führt alle drei erforderlichen Excel-Makros aus:
   - `Tabelle1.Protokollnummer_generieren_unsichtbar` (Protokollnummer-Generierung)
@@ -111,12 +112,10 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 ## Offene fachliche Punkte
 
 - Erfolgreiche Fundordner werden noch nicht automatisch nach `Protokollentwürfe` verschoben.
-- Die Terminexcel-Kundenauflösung ist noch nicht in den Worker integriert.
 - Abschlussprotokoll, Wiederholung fehlgeschlagener Einträge und atomare Excel-Sicherung fehlen noch.
 
 - Nummernkreise und vollständige Namen weiterer Protokollersteller festlegen. `Allgemeine Angaben!C7` und das Protokollnummernmakro unterstützen derzeit nur `Gunnar Schäfer` und `Kevin Koehn`.
-- Verhalten bei mehreren Terminen desselben Prüfers am selben Tag abschließend festlegen.
-- Regeln zur Normalisierung abweichender Kundennamen zwischen Terminexcel und Kundenliste bestätigen.
+- Pflegeweg für zusätzliche interne Ausschlussbegriffe festlegen.
 - Pflegeweg für künftig hinzukommende Prüfer festlegen.
 
 ## Technische Risiken

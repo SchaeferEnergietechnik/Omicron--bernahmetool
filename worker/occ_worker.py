@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,52 @@ MACRO_TOGGLE_SECTIONS_CANDIDATES = [
 ]
 MACRO_HIDE_EMPTY_ROWS = "Tabelle7.ZeilenAusblendenWennLeer"
 DEFAULT_EXPORT_DIRECTORY = Path(r"C:\Omicron_Datenexport")
+TERMINEXCEL_PATH = Path(r"Y:\GES Energietechnik\Termine.xlsx")
+TERMINEXCEL_SHEET = "Termine"
+CHECKLIST_SHEET = "Schutzprüf-Checkliste"
+GENERAL_SHEET = "Allgemeine Angaben"
+CUSTOMER_LIST_SHEET = "Kunden"
+CUSTOMER_TARGET_CELL = "C2"
+INSPECTOR_DATE_CELL = "B7"
+
+INSPECTOR_ALIASES: dict[str, str] = {
+    "helmchen": "Niklas Helmchen",
+    "niklas helmchen": "Niklas Helmchen",
+    "n helmchen": "Niklas Helmchen",
+    "n. helmchen": "Niklas Helmchen",
+    "faethke": "Pascal Fäthke",
+    "fathke": "Pascal Fäthke",
+    "fäthke": "Pascal Fäthke",
+    "pascal fäthke": "Pascal Fäthke",
+    "p. fäthke": "Pascal Fäthke",
+    "schmidt": "Hagen Schmidt",
+    "hagen schmidt": "Hagen Schmidt",
+    "h. schmidt": "Hagen Schmidt",
+    "koehn": "Kevin Koehn",
+    "kevin koehn": "Kevin Koehn",
+    "k. koehn": "Kevin Koehn",
+    "wendt": "Sebastian Wendt",
+    "sebastian wendt": "Sebastian Wendt",
+    "s. wendt": "Sebastian Wendt",
+    "mummhardt": "Elias Mummhardt",
+    "elias mummhardt": "Elias Mummhardt",
+    "e. mummhardt": "Elias Mummhardt",
+    "kolzer": "Finn Kolzer",
+    "finn kolzer": "Finn Kolzer",
+    "f. kolzer": "Finn Kolzer",
+}
+
+INTERNAL_TERM_KEYWORDS = (
+    "urlaub",
+    "elternzeit",
+    "intern",
+    "ges intern",
+    "schulung",
+    "krank",
+    "büro",
+    "buero",
+    "homeoffice",
+)
 
 
 class CancellationRequested(Exception):
@@ -358,6 +405,212 @@ class Worker:
         excel.Application.Run(f"'{workbook_name}'!{macro_name}")
         self.wait(2)
 
+    def normalize_text(self, value: str) -> str:
+        normalized = value.lower().strip()
+        normalized = normalized.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized
+
+    def excel_value_to_date(self, value: Any) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, (int, float)):
+            try:
+                return (datetime(1899, 12, 30) + timedelta(days=float(value))).date()
+            except Exception:
+                return None
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%y"):
+                try:
+                    return datetime.strptime(text, fmt).date()
+                except ValueError:
+                    continue
+        return None
+
+    def map_inspector_name(self, raw_name: str) -> str | None:
+        normalized = self.normalize_text(raw_name)
+        if normalized in INSPECTOR_ALIASES:
+            return INSPECTOR_ALIASES[normalized]
+        for alias, full_name in INSPECTOR_ALIASES.items():
+            if alias in normalized:
+                return full_name
+        return None
+
+    def checked_inspector_from_checkboxes(self, workbook) -> str:
+        sheet = workbook.Worksheets(CHECKLIST_SHEET)
+        checked_labels: list[str] = []
+
+        # Forms-Checkboxen
+        try:
+            checkboxes = sheet.CheckBoxes()
+            for index in range(1, int(checkboxes.Count) + 1):
+                checkbox = checkboxes.Item(index)
+                try:
+                    value = int(checkbox.Value)
+                except Exception:
+                    value = 0
+                if value == 1:
+                    label = ""
+                    try:
+                        label = str(checkbox.Caption).strip()
+                    except Exception:
+                        pass
+                    if label:
+                        checked_labels.append(label)
+        except Exception:
+            pass
+
+        # ActiveX-Checkboxen
+        try:
+            ole_objects = sheet.OLEObjects()
+            for index in range(1, int(ole_objects.Count) + 1):
+                ole = ole_objects.Item(index)
+                try:
+                    prog_id = str(ole.progID)
+                except Exception:
+                    prog_id = ""
+                if "CheckBox" not in prog_id:
+                    continue
+                try:
+                    value = bool(ole.Object.Value)
+                except Exception:
+                    value = False
+                if value:
+                    label = ""
+                    try:
+                        label = str(ole.Object.Caption).strip()
+                    except Exception:
+                        pass
+                    if label:
+                        checked_labels.append(label)
+        except Exception:
+            pass
+
+        unique_labels = list(dict.fromkeys(label for label in checked_labels if label))
+        if not unique_labels:
+            raise RuntimeError("Kein angehakter Prüfer in Schutzprüf-Checkliste gefunden")
+        if len(unique_labels) > 1:
+            raise RuntimeError(f"Mehrere angehakte Prüfer gefunden: {', '.join(unique_labels)}")
+        return unique_labels[0]
+
+    def read_customer_list(self, workbook) -> list[str]:
+        customer_sheet = workbook.Worksheets(CUSTOMER_LIST_SHEET)
+        values = customer_sheet.Range("A1:A35").Value
+        customers: list[str] = []
+        for row in values:
+            value = row[0] if isinstance(row, tuple) else row
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                customers.append(text)
+        return customers
+
+    def contains_internal_keyword(self, value: str) -> bool:
+        normalized = self.normalize_text(value)
+        return any(keyword in normalized for keyword in INTERNAL_TERM_KEYWORDS)
+
+    def find_inspector_header_column(self, sheet, inspector_full_name: str) -> int:
+        used_columns = int(sheet.UsedRange.Columns.Count)
+        for col in range(1, max(used_columns, 1) + 1):
+            value = sheet.Cells(1, col).Value
+            if value is None:
+                continue
+            if self.normalize_text(str(value)) == self.normalize_text(inspector_full_name):
+                return col
+        raise RuntimeError(f"Prüferblock '{inspector_full_name}' im Blatt '{TERMINEXCEL_SHEET}' nicht gefunden")
+
+    def resolve_customer_from_terminexcel(self, excel, workbook, item: dict[str, Any]) -> str:
+        if not TERMINEXCEL_PATH.is_file():
+            raise RuntimeError(f"Terminexcel nicht erreichbar: {TERMINEXCEL_PATH}")
+
+        raw_inspector = self.checked_inspector_from_checkboxes(workbook)
+        inspector_full_name = self.map_inspector_name(raw_inspector)
+        if not inspector_full_name:
+            raise RuntimeError(f"Kein Alias für Prüfer gefunden: {raw_inspector}")
+
+        checklist_sheet = workbook.Worksheets(CHECKLIST_SHEET)
+        exam_date = self.excel_value_to_date(checklist_sheet.Range(INSPECTOR_DATE_CELL).Value)
+        if exam_date is None:
+            raise RuntimeError("Prüfdatum in Schutzprüf-Checkliste!B7 ist leer oder ungültig")
+
+        customers = self.read_customer_list(workbook)
+        if not customers:
+            raise RuntimeError("Kundenliste Kunden!A1:A35 ist leer")
+
+        termin_workbook = None
+        try:
+            termin_workbook = excel.Workbooks.Open(str(TERMINEXCEL_PATH), ReadOnly=True)
+            termin_sheet = termin_workbook.Worksheets(TERMINEXCEL_SHEET)
+            inspector_col = self.find_inspector_header_column(termin_sheet, inspector_full_name)
+            date_col = inspector_col - 2
+            customer_col = inspector_col + 1
+            if date_col < 1:
+                raise RuntimeError(f"Ungültige Spaltenstruktur für Prüferblock '{inspector_full_name}'")
+
+            last_row = int(termin_sheet.Cells(termin_sheet.Rows.Count, date_col).End(-4162).Row)
+            raw_customer_candidates: list[str] = []
+            for row in range(2, max(last_row, 2) + 1):
+                row_date = self.excel_value_to_date(termin_sheet.Cells(row, date_col).Value)
+                if row_date != exam_date:
+                    continue
+                customer_value = termin_sheet.Cells(row, customer_col).Value
+                if customer_value is None:
+                    continue
+                customer_text = str(customer_value).strip()
+                if not customer_text:
+                    continue
+                if self.contains_internal_keyword(customer_text):
+                    continue
+                raw_customer_candidates.append(customer_text)
+
+            exact_customer_candidates = [value for value in raw_customer_candidates if value in customers]
+
+            # Optionaler manueller Override pro Item (z. B. aus späterer GUI-Auswahl).
+            manual_customer = str(item.get("manualCustomer", "")).strip()
+            if manual_customer:
+                if manual_customer not in customers:
+                    raise RuntimeError(f"Manueller Kunde nicht in Kundenliste A1:A35: {manual_customer}")
+                return manual_customer
+
+            unique_candidates = list(dict.fromkeys(exact_customer_candidates))
+            if len(unique_candidates) == 1:
+                return unique_candidates[0]
+            if len(unique_candidates) > 1:
+                self.emit(
+                    "customer_selection_required",
+                    itemId=item.get("id"),
+                    inspector=inspector_full_name,
+                    examDate=str(exam_date),
+                    options=unique_candidates,
+                )
+                raise RuntimeError(
+                    "Mehrere passende Kunden gefunden. Manuelle Auswahl erforderlich: "
+                    + ", ".join(unique_candidates)
+                )
+
+            self.emit(
+                "customer_manual_required",
+                itemId=item.get("id"),
+                inspector=inspector_full_name,
+                examDate=str(exam_date),
+                candidates=raw_customer_candidates,
+            )
+            raise RuntimeError(
+                "Kein exakt passender Kunde in Kunden!A1:A35 gefunden. "
+                "Manuelle Eingabe in Allgemeine Angaben!C2 erforderlich."
+            )
+        finally:
+            if termin_workbook is not None:
+                termin_workbook.Close(SaveChanges=False)
+
     def sanitize_filename_part(self, value: str) -> str:
         sanitized = re.sub(r'[\\/:*?"<>|\[\]]+', "_", value)
         sanitized = re.sub(r"\s+", " ", sanitized).strip().strip(".")
@@ -394,7 +647,7 @@ class Worker:
         alt_base = alt_base[:available_name_len].rstrip(" ._")
         return source_path.with_name(f"{alt_base}{suffix}")
 
-    def refresh_excel(self, excel_path: Path) -> Path:
+    def refresh_excel(self, excel_path: Path, item: dict[str, Any]) -> Path:
         if not excel_path.is_file():
             raise FileNotFoundError(excel_path)
         excel = None
@@ -417,6 +670,11 @@ class Worker:
             except Exception:
                 pass
             self.wait(5)
+
+            selected_customer = self.resolve_customer_from_terminexcel(excel, workbook, item)
+            workbook.Worksheets(GENERAL_SHEET).Range(CUSTOMER_TARGET_CELL).Value = selected_customer
+            self.emit("customer_assigned", itemId=item.get("id"), customer=selected_customer)
+
             workbook.Worksheets(EXCEL_SHEET).Activate()
             self.run_macro(excel, workbook.Name, MACRO_PROTOCOL_NO)
             if self.skip_section_macro:
@@ -502,7 +760,7 @@ class Worker:
                         self.emit("occ_completed", itemId=item_id, occPath=str(occ_path), excelPath=str(working_excel_path))
 
                     self.emit("excel_started", itemId=item_id, excelPath=str(working_excel_path))
-                    working_excel_path = self.refresh_excel(working_excel_path)
+                    working_excel_path = self.refresh_excel(working_excel_path, item)
                     self.emit("excel_completed", itemId=item_id, excelPath=str(working_excel_path))
                     
                     self.terminate_mashup_loader()
