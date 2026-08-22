@@ -1,14 +1,17 @@
 # Projektstand
 
-**Stand:** 22. August 2026, 00:00 Uhr  
-**Status:** Electron-Desktop-GUI, nativer Cloud-Import, Python-Worker mit vollständiger Excel-Makro-Integration, manuelle OCC-zu-Excel-Zuordnung, sichtbare Schrittanzeige und robuster Nachtlauf sind lauffähig.  
-**Letzter Commit:** `21de035` – Align docs and UI with relaxed customer matching
+**Stand:** 22. August 2026  
+**Status:** Electron-Desktop-GUI, nativer Cloud-Import, Python-Worker mit robuster Excel-Verarbeitung, manuelle OCC-zu-Excel-Zuordnung, sichtbare Schrittanzeige und optionales Herunterfahren nach Laufende sind lauffähig.  
+**Letzter Commit:** `48d0812` – Always save Excel even when customer lookup or macros fail
 
 ## Sicherung und Dokumentation (22.08.2026)
 
 - Technischer Sicherungsstand auf `main`: `21de035`
 - Fachliche Änderung Kundenzuordnung (Teilwortabgleich mit Stopwort-Filter): `d41eb95`
 - Konsistenzanpassungen Doku und UI-Texte: `21de035`
+- Packaged-Worker-Pfad und `asarUnpack` für Python-Worker: `95b1512`
+- Robuste Nachtlauf-Verarbeitung (Kundenzuordnung/Makrofehler als Warnung): `fedcf35`, `48d0812`
+- Option "Nach Beendigung Rechner herunterfahren" in der GUI: `d66b148`
 - Wiederherstellung auf diesen Stand ist jederzeit per Git-Checkout der Commit-ID oder über den zugehörigen Tag möglich.
 
 ## Ziel
@@ -24,8 +27,9 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 5. Verarbeitung erst starten, wenn alle Zuordnungen eindeutig sind.
 6. Je Zuordnungsgruppe: Mashup beenden, OCC sichtbar exportieren, danach Excel aktualisieren und Makros ausführen.
 7. Laufzeit und aktueller Schritt laufend anzeigen.
-8. Bei Einzelfehlern nicht abbrechen, sondern weiterarbeiten und Fehler sammeln.
+8. Bei Einzelfehlern nicht abbrechen, sondern weiterarbeiten, speichern was möglich ist und Fehler sammeln.
 9. Nach Laufende Zusammenfassung und Fehlerbericht ausgeben.
+10. Optional Rechner nach Abschluss automatisch herunterfahren.
 
 ## Erledigt
 
@@ -42,6 +46,10 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Fehlerbericht als JSON-Datei aus dem Worker ergänzt, wenn Fehler oder Skip-Fälle auftreten.
 - Worker-Reihenfolge für Fundordner stabilisiert: OCC-Reihenfolge NAP/sonstige vor EZE.
 - Nachtlauf-Verhalten umgesetzt: Einzelfehler beenden nicht den gesamten Lauf.
+- Excel-Verarbeitung gehärtet: Datei wird auch bei Kundenzuordnungs- oder Makrofehlern gespeichert.
+- Kundenzuordnung erweitert: wenn kein Treffer gefunden wird, bleibt der vorhandene Kunde aus `Allgemeine Angaben!C2` als Fallback erhalten.
+- Excel-Dialoge zur Link-/Datenaktualisierung werden für unbeaufsichtigte Läufe unterdrückt.
+- Option in der GUI ergänzt: Rechner nach Beendigung automatisch herunterfahren (standardmäßig deaktiviert).
 - Manuelle Zuordnung OCC -> Excel in der GUI vor Verarbeitungsstart ergänzt.
 - Terminexcel-Kundenauflösung im Worker integriert (Teilwortabgleich gegen Kundenliste mit Stopwort-Filter, Datumsvergleich ohne Uhrzeit, interne Begriffe gefiltert).
 
@@ -83,11 +91,14 @@ Der Python-Worker unter `worker/occ_worker.py` ist nun vollständig implementier
 
 - **OCC-Export:** Öffnet OCC sichtbar, öffnet Exportdialog, wartet auf stabile CSV-Ausgabe, schließt Omicron
 - **Excel-Refresh:** Öffnet Arbeitsmappe, führt `RefreshAll` durch, wartet auf Berechnung
+- **Excel ohne Rückfragen:** Unterdrückt Excel-Link-/Aktualisierungsabfragen beim Öffnen für Nachtläufe
 - **Makro-Ausführung:** Ruft nacheinander auf:
   1. `Tabelle1.Protokollnummer_generieren_unsichtbar` (Protokollnummer)
   2. `Modul1.BereicheEinOderAusblenden_Start` oder `BereicheEinOderAusblenden_Start` (mit Fallback-Logik)
   3. `Tabelle7.ZeilenAusblendenWennLeer` (Leerzeilen-Ausblendung)
 - **Fehlerbehandlung:** Sammelt Fehler und Skip-Fälle für den Abschlussbericht, setzt Verarbeitung bei Einzelfehlern fort
+- **Speicherstrategie:** Speichert Ergebnisdateien auch bei Makro- oder Kundenzuordnungsproblemen; bei SaveAs-Fehlern Fallback auf `Save()` der Originaldatei
+- **Kundenfallback:** Bei nicht auflösbarem Terminexcel-Treffer wird der vorhandene Vorlagenkunde aus `Allgemeine Angaben!C2` beibehalten
 - **Fortschritt:** Emittiert JSON-Lines-Events für Mashup, OCC, Excel und Gesamtfortschritt
 - **Abbruch:** Respektiert Abbruchdatei an sicheren Grenzen
 
@@ -114,7 +125,7 @@ Aktuell für die automatische Terminzuordnung vorgesehen:
 
 Die in V19m noch vorhandene Checkbox `Schäfer` gilt fachlich als veraltet und wird ignoriert. `Mundkowski` ist in V19m nicht mehr enthalten.
 
-Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfen nicht automatisch als Kunde übernommen werden. Mehrere passende Termine oder nicht eindeutig normalisierbare Kundennamen erfordern eine Benutzerentscheidung.
+Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfen nicht automatisch als Kunde übernommen werden. Mehrere passende Termine oder nicht eindeutig normalisierbare Kundennamen werden protokolliert; der Lauf wird fortgesetzt und die Vorlage bleibt mit bestehendem Kundenwert speicherbar.
 
 ## Offene fachliche Punkte
 

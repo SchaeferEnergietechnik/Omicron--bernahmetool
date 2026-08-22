@@ -23,7 +23,7 @@ Die ausführliche Beschreibung liegt unter:
 
 ## Aktueller Stand
 
-Die produktive Desktop-Basis ist umgesetzt: Electron-Oberfläche, nativer Cloud-Import, Python-Worker, manuelle OCC-zu-Excel-Zuordnung, Schrittanzeige und robuster Nachtlauf mit Fehlerbericht sind vorhanden. Offen sind vor allem die Terminexcel-Kundenauflösung, die automatische Erfolgsablage nach `Protokollentwürfe`, der Wiederanlauf fehlgeschlagener Einträge und die atomare Excel-Sicherung. Der detaillierte Übergabestand steht unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
+Die produktive Desktop-Basis ist umgesetzt: Electron-Oberfläche, nativer Cloud-Import, Python-Worker, manuelle OCC-zu-Excel-Zuordnung, Schrittanzeige und robuster Nachtlauf mit Fehlerbericht sind vorhanden. Die Terminexcel-Kundenauflösung ist integriert (Teilwortabgleich mit Stopwort-Filter). Wenn keine eindeutige Kundenzuordnung gelingt oder Makros fehlschlagen, wird der Lauf fortgesetzt und die Excel dennoch gespeichert. Optional kann der Rechner nach Laufende automatisch heruntergefahren werden (standardmäßig deaktiviert). Offen sind vor allem die automatische Erfolgsablage nach `Protokollentwürfe`, der Wiederanlauf fehlgeschlagener Einträge und die atomare Excel-Sicherung. Der detaillierte Übergabestand steht unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
 
 ## Windows-Desktopversion
 

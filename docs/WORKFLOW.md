@@ -113,8 +113,11 @@ Ein Fehler in einem Eintrag soll standardmäßig die übrigen eindeutigen Eintr�
 Für den Nachtlauf gilt zusätzlich:
 
 - Der Lauf verarbeitet weitere Einträge trotz Fehlern einzelner Ordner.
+- Wenn Kundenzuordnung oder Makros fehlschlagen, wird nicht hart abgebrochen; stattdessen werden Warnungen protokolliert.
+- Die Excel-Datei wird trotzdem gespeichert. Falls `SaveAs` fehlschlägt, wird ein Fallback-`Save()` auf der Originaldatei versucht.
 - Fehler und übersprungene Einträge werden gesammelt.
 - Am Ende wird ein Fehlerbericht als JSON-Datei im Arbeitsbereich ausgegeben.
+- Optional kann der Rechner nach Laufende automatisch heruntergefahren werden (GUI-Option, standardmäßig aus).
 
 Nach Abschluss aller Einträge eines Fundordners:
 
@@ -136,8 +139,8 @@ Vor der Excel-Nachverarbeitung:
 4. Bei genau einem Treffer den Wert der Spalte `Kunde` lesen.
 5. Den Wert mit der Kundenliste `Kunden!A1:A35` der Prüfdaten-Arbeitsmappe abgleichen.
 6. Den eindeutigen vollständigen Kundeneintrag nach `Allgemeine Angaben!C2` schreiben.
-7. Bei mehreren Treffern die Verarbeitung anhalten und eine manuelle Auswahl verlangen.
-8. Bei keinem Treffer die Verarbeitung anhalten und eine manuelle Eingabe verlangen.
+7. Bei mehreren Treffern Warnung protokollieren; vorhandenen Vorlagenkunden beibehalten und Verarbeitung fortsetzen.
+8. Bei keinem Treffer Warnung protokollieren; vorhandenen Vorlagenkunden beibehalten und Verarbeitung fortsetzen.
 
 Dabei gilt:
 
@@ -146,7 +149,7 @@ Dabei gilt:
 - Rechtsform- und Füllwörter (zum Beispiel `gmbh`, `ag`, `kg`, `co`, `und`) werden dabei ignoriert.
 - Interne oder Abwesenheitseinträge wie `urlaub`, `elternzeit`, `intern`, `ges intern`, `schulung`, `krank`, `büro`, `homeoffice` werden nicht automatisch übernommen.
 
-Die Kundenzuordnung muss vor `Protokollnummer_generieren_unsichtbar` erfolgen, weil dieses Makro den Kunden aus `Allgemeine Angaben!C2` in die zentrale Protokollübersicht übernimmt.
+Die Kundenzuordnung erfolgt vor `Protokollnummer_generieren_unsichtbar`, sofern ein eindeutiger Treffer vorliegt. Wenn kein eindeutiger Treffer ermittelt wird, bleibt der bereits in `Allgemeine Angaben!C2` vorhandene Vorlagenwert erhalten, damit die Verarbeitung und Speicherung weiterlaufen kann.
 
 ## 7. Abbruch
 
