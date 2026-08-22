@@ -68,6 +68,20 @@ INSPECTOR_ALIASES: dict[str, str] = {
     "f. kolzer": "Finn Kolzer",
 }
 
+INSPECTOR_ALIAS_ITEMS_SORTED = sorted(INSPECTOR_ALIASES.items(), key=lambda item: len(item[0]), reverse=True)
+
+IGNORED_INSPECTOR_ALIASES = (
+    "schaefer",
+    "schäfer",
+    "g schafer",
+    "g. schafer",
+    "g schäfer",
+    "g. schäfer",
+    "mundkowski",
+    "t mundkowski",
+    "t. mundkowski",
+)
+
 INTERNAL_TERM_KEYWORDS = (
     "urlaub",
     "elternzeit",
@@ -438,14 +452,52 @@ class Worker:
         normalized = self.normalize_text(raw_name)
         if normalized in INSPECTOR_ALIASES:
             return INSPECTOR_ALIASES[normalized]
-        for alias, full_name in INSPECTOR_ALIASES.items():
-            if alias in normalized:
+        for alias, full_name in INSPECTOR_ALIAS_ITEMS_SORTED:
+            pattern = rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
+            if re.search(pattern, normalized):
                 return full_name
         return None
 
+    def is_ignored_inspector_label(self, raw_label: str) -> bool:
+        normalized = self.normalize_text(raw_label)
+        for alias in IGNORED_INSPECTOR_ALIASES:
+            pattern = rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
+            if re.search(pattern, normalized):
+                return True
+        return False
+
+    def extract_inspector_names(self, raw_label: str) -> list[str]:
+        normalized = self.normalize_text(raw_label)
+        if not normalized:
+            return []
+        if self.is_ignored_inspector_label(raw_label):
+            return []
+
+        if normalized in INSPECTOR_ALIASES:
+            return [INSPECTOR_ALIASES[normalized]]
+
+        matches: list[str] = []
+        for alias, full_name in INSPECTOR_ALIAS_ITEMS_SORTED:
+            pattern = rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
+            if re.search(pattern, normalized):
+                matches.append(full_name)
+        return list(dict.fromkeys(matches))
+
+    def map_checked_labels_to_unique_inspectors(self, labels: list[str]) -> list[str]:
+        resolved: list[str] = []
+        for label in labels:
+            candidates = self.extract_inspector_names(label)
+            # Nur eindeutig zuordenbare Labels berücksichtigen. Mehrdeutige Sammeltexte
+            # (z. B. eine ganze Namenszeile als Caption) würden sonst fälschlich mehrere
+            # Prüfer als "angehakt" markieren.
+            if len(candidates) == 1:
+                resolved.append(candidates[0])
+        return list(dict.fromkeys(resolved))
+
     def checked_inspector_from_checkboxes(self, workbook) -> str:
         sheet = workbook.Worksheets(CHECKLIST_SHEET)
-        checked_labels: list[str] = []
+        forms_checked_labels: list[str] = []
+        activex_checked_labels: list[str] = []
 
         # Forms-Checkboxen
         try:
@@ -463,7 +515,7 @@ class Worker:
                     except Exception:
                         pass
                     if label:
-                        checked_labels.append(label)
+                        forms_checked_labels.append(label)
         except Exception:
             pass
 
@@ -489,16 +541,43 @@ class Worker:
                     except Exception:
                         pass
                     if label:
-                        checked_labels.append(label)
+                        activex_checked_labels.append(label)
         except Exception:
             pass
 
-        unique_labels = list(dict.fromkeys(label for label in checked_labels if label))
-        if not unique_labels:
-            raise RuntimeError("Kein angehakter Prüfer in Schutzprüf-Checkliste gefunden")
-        if len(unique_labels) > 1:
-            raise RuntimeError(f"Mehrere angehakte Prüfer gefunden: {', '.join(unique_labels)}")
-        return unique_labels[0]
+        forms_names = self.map_checked_labels_to_unique_inspectors(forms_checked_labels)
+        activex_names = self.map_checked_labels_to_unique_inspectors(activex_checked_labels)
+        combined_names = list(dict.fromkeys(forms_names + activex_names))
+        raw_checked = list(dict.fromkeys(forms_checked_labels + activex_checked_labels))
+        ignored_checked = [label for label in raw_checked if self.is_ignored_inspector_label(label)]
+
+        # Einige Vorlagen enthalten sowohl Forms- als auch ActiveX-Elemente.
+        # Wenn nur eine Quelle konsistent genau einen Prüfer liefert, akzeptieren wir sie.
+        if len(activex_names) == 1 and (not forms_names or forms_names == activex_names):
+            return activex_names[0]
+        if len(forms_names) == 1 and (not activex_names or activex_names == forms_names):
+            return forms_names[0]
+        if len(combined_names) == 1:
+            return combined_names[0]
+
+        if len(combined_names) > 1:
+            raise RuntimeError(
+                "Mehrere angehakte Prüfer erkannt: "
+                f"Forms={forms_names or forms_checked_labels}, ActiveX={activex_names or activex_checked_labels}"
+            )
+
+        if ignored_checked and len(ignored_checked) == len(raw_checked):
+            raise RuntimeError(
+                "Nur veraltete Prüferbezeichnungen angehakt (nicht unterstützt): "
+                + ", ".join(ignored_checked)
+            )
+
+        if raw_checked:
+            raise RuntimeError(
+                "Angehakte Prüfer-Checkbox gefunden, aber kein unterstützter Prüfername erkannt: "
+                + ", ".join(raw_checked)
+            )
+        raise RuntimeError("Kein angehakter Prüfer in Schutzprüf-Checkliste gefunden")
 
     def read_customer_list(self, workbook) -> list[str]:
         customer_sheet = workbook.Worksheets(CUSTOMER_LIST_SHEET)
@@ -531,10 +610,8 @@ class Worker:
         if not TERMINEXCEL_PATH.is_file():
             raise RuntimeError(f"Terminexcel nicht erreichbar: {TERMINEXCEL_PATH}")
 
-        raw_inspector = self.checked_inspector_from_checkboxes(workbook)
-        inspector_full_name = self.map_inspector_name(raw_inspector)
-        if not inspector_full_name:
-            raise RuntimeError(f"Kein Alias für Prüfer gefunden: {raw_inspector}")
+        inspector_full_name = self.checked_inspector_from_checkboxes(workbook)
+        self.emit("inspector_detected", itemId=item.get("id"), inspector=inspector_full_name)
 
         checklist_sheet = workbook.Worksheets(CHECKLIST_SHEET)
         exam_date = self.excel_value_to_date(checklist_sheet.Range(INSPECTOR_DATE_CELL).Value)
