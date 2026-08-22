@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from openpyxl import load_workbook
 from pywinauto import Application
 from pywinauto.findwindows import ElementNotFoundError, find_windows
 import win32com.client
@@ -596,14 +597,13 @@ class Worker:
         normalized = self.normalize_text(value)
         return any(keyword in normalized for keyword in INTERNAL_TERM_KEYWORDS)
 
-    def find_inspector_header_column(self, sheet, inspector_full_name: str) -> int:
-        used_columns = int(sheet.UsedRange.Columns.Count)
-        for col in range(1, max(used_columns, 1) + 1):
-            value = sheet.Cells(1, col).Value
+    def find_inspector_header_column(self, header_row: tuple[Any, ...], inspector_full_name: str) -> int:
+        normalized_target = self.normalize_text(inspector_full_name)
+        for index, value in enumerate(header_row, start=1):
             if value is None:
                 continue
-            if self.normalize_text(str(value)) == self.normalize_text(inspector_full_name):
-                return col
+            if self.normalize_text(str(value)) == normalized_target:
+                return index
         raise RuntimeError(f"Prüferblock '{inspector_full_name}' im Blatt '{TERMINEXCEL_SHEET}' nicht gefunden")
 
     def resolve_customer_from_terminexcel(self, excel, workbook, item: dict[str, Any]) -> str:
@@ -622,23 +622,35 @@ class Worker:
         if not customers:
             raise RuntimeError("Kundenliste Kunden!A1:A35 ist leer")
 
-        termin_workbook = None
+        # Die Terminexcel wird absichtlich nicht per Excel-UI geöffnet,
+        # damit keine zusätzliche sichtbare Arbeitsmappe oder COM-Dialoge entstehen.
         try:
-            termin_workbook = excel.Workbooks.Open(str(TERMINEXCEL_PATH), ReadOnly=True)
-            termin_sheet = termin_workbook.Worksheets(TERMINEXCEL_SHEET)
-            inspector_col = self.find_inspector_header_column(termin_sheet, inspector_full_name)
+            termin_workbook = load_workbook(filename=str(TERMINEXCEL_PATH), read_only=True, data_only=True)
+        except Exception as error:
+            raise RuntimeError(f"Terminexcel konnte nicht direkt gelesen werden: {error}") from error
+
+        try:
+            if TERMINEXCEL_SHEET not in termin_workbook.sheetnames:
+                raise RuntimeError(f"Blatt '{TERMINEXCEL_SHEET}' in Terminexcel nicht gefunden")
+            termin_sheet = termin_workbook[TERMINEXCEL_SHEET]
+            header_cells = next(termin_sheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
+            if not header_cells:
+                raise RuntimeError("Terminexcel enthält keine Kopfzeile")
+
+            inspector_col = self.find_inspector_header_column(header_cells, inspector_full_name)
             date_col = inspector_col - 2
             customer_col = inspector_col + 1
             if date_col < 1:
                 raise RuntimeError(f"Ungültige Spaltenstruktur für Prüferblock '{inspector_full_name}'")
 
-            last_row = int(termin_sheet.Cells(termin_sheet.Rows.Count, date_col).End(-4162).Row)
             raw_customer_candidates: list[str] = []
-            for row in range(2, max(last_row, 2) + 1):
-                row_date = self.excel_value_to_date(termin_sheet.Cells(row, date_col).Value)
+            for row in termin_sheet.iter_rows(min_row=2, values_only=True):
+                if not row:
+                    continue
+                row_date = self.excel_value_to_date(row[date_col - 1] if len(row) >= date_col else None)
                 if row_date != exam_date:
                     continue
-                customer_value = termin_sheet.Cells(row, customer_col).Value
+                customer_value = row[customer_col - 1] if len(row) >= customer_col else None
                 if customer_value is None:
                     continue
                 customer_text = str(customer_value).strip()
@@ -685,8 +697,7 @@ class Worker:
                 "Manuelle Eingabe in Allgemeine Angaben!C2 erforderlich."
             )
         finally:
-            if termin_workbook is not None:
-                termin_workbook.Close(SaveChanges=False)
+            termin_workbook.close()
 
     def sanitize_filename_part(self, value: str) -> str:
         sanitized = re.sub(r'[\\/:*?"<>|\[\]]+', "_", value)
