@@ -99,9 +99,15 @@ async function discoverWorkFolders(
   const current = occFiles.length
     ? [{ id: relativePath, path: relativePath, occFiles, excelFiles, state: 'bereit' as const, enabled: true, handle: directory }]
     : []
+
+  const shouldSkipDirectory = (name: string) => {
+    const lowered = name.toLowerCase()
+    return name === 'Protokollentwürfe' || lowered.includes('erledigt')
+  }
+
   const nested = await Promise.all(
     folders
-      .filter((folder) => folder.name !== 'Protokollentwürfe')
+      .filter((folder) => !shouldSkipDirectory(folder.name))
       .map((folder) => discoverWorkFolders(folder, `${relativePath} / ${folder.name}`)),
   )
   return [...current, ...nested.flat()]

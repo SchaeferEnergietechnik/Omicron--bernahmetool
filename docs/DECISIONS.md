@@ -96,6 +96,14 @@ Wenn ein Fundordner mehrere Excel-Dateien enthält, wird pro OCC-Datei eine manu
 
 Der unbeaufsichtigte Lauf arbeitet bei Einzelfehlern weiter und sammelt Fehler sowie übersprungene Einträge. Nach Laufende wird bei Bedarf ein maschinenlesbarer Fehlerbericht erzeugt.
 
+### D-015: Ausschluss erledigter Ordner beim Scan
+
+**Status:** entschieden und in Desktop-Scan umgesetzt
+
+Ordner, deren Name den Bestandteil `erledigt` enthält, werden bei der rekursiven Suche vollständig ausgeschlossen. Der Ausschluss gilt unabhängig von Groß-/Kleinschreibung und umfasst den gesamten Teilbaum inklusive aller Unterordner.
+
+Ziel ist eine kürzere Suchlaufzeit und die Vermeidung unnötiger Verarbeitung bereits abgeschlossener Bereiche.
+
 ## Offene Entscheidungen
 
 ### O-001: Zuordnung OCC zu Excel
@@ -130,7 +138,9 @@ Die Antwort bestimmt, wie die Automatisierung in einen separaten Prozess ausgela
 
 ### O-007: Scan-Grenzen
 
-**Frage:** Sollen bestimmte Ordner, Dateimuster oder Archivbereiche von der rekursiven Suche ausgeschlossen werden?
+**Teilweise geklärt:** `Protokollentwürfe` und Ordner mit Namensbestandteil `erledigt` sind ausgeschlossen.
+
+**Verbleibende Frage:** Sollen darüber hinaus weitere Ordner, Dateimuster oder Archivbereiche von der rekursiven Suche ausgeschlossen werden?
 
 ### O-008: Aufbau und Zugriff der Terminexcel
 

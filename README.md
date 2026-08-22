@@ -21,7 +21,7 @@ Die ausführliche Beschreibung liegt unter:
 
 ## Aktueller Stand
 
-Die fachliche und technische Voranalyse ist abgeschlossen. Vorhanden sind ein erster React-Prototyp, die Analyse der bestehenden Windows-Automation und Beispieldateien sowie eine vorbereitete VBA-Ergänzung für V19m. Die Implementierung des produktiven Windows-Tools steht noch aus. Der genaue Übergabestand und die Reihenfolge für die spätere Fortsetzung stehen unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
+Die produktive Desktop-Basis ist umgesetzt: Electron-Oberfläche, nativer Cloud-Import, Python-Worker, manuelle OCC-zu-Excel-Zuordnung, Schrittanzeige und robuster Nachtlauf mit Fehlerbericht sind vorhanden. Offen sind vor allem die Terminexcel-Kundenauflösung, die automatische Erfolgsablage nach `Protokollentwürfe`, der Wiederanlauf fehlgeschlagener Einträge und die atomare Excel-Sicherung. Der detaillierte Übergabestand steht unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
 
 ## Windows-Desktopversion
 
@@ -47,6 +47,10 @@ Die Desktop-App kopiert Cloud-Fundordner zunächst ausschließlich lesend in den
 lokalen Arbeitsordner. Vor der echten Verarbeitung müssen die angezeigten
 Zuordnungen geprüft werden. Während Omicron sichtbar bedient wird, darf die aktive
 Windows-Sitzung nicht anderweitig verwendet werden.
+
+Ordner mit `Protokollentwürfe` oder einem Namensbestandteil `erledigt`
+(Groß-/Kleinschreibung egal) werden beim rekursiven Cloud-Scan einschließlich
+aller Unterordner bewusst übersprungen.
 
 ## Entwicklung
 

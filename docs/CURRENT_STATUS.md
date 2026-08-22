@@ -25,6 +25,7 @@ Das Windows-Tool soll einen Cloud-Quellordner lokal bereitstellen, Fundordner re
 - Native Electron-Desktop-Hülle mit sicherer Preload-/IPC-Grenze ergänzt.
 - Native Windows-Ordnerdialoge für Cloud-Quelle und lokalen Arbeitsordner ergänzt.
 - Rekursiver Cloud-Scan und nicht überschreibender lokaler Import in den Desktop-Prozess verlagert.
+- Cloud-Scan optimiert: Ordner mit `erledigt` im Namen werden inklusive Unterordner ausgeschlossen.
 - GUI mit dem separaten Python-Worker, JSON-Lines-Fortschritt und kontrolliertem Abbruch verbunden.
 - Electron-Installer-Konfiguration für einen Windows-NSIS-Build ergänzt.
 - Verarbeitungsschritte im UI sichtbar gemacht: Mashup, OCC-Export, Excel-Bearbeitung, Abschluss.

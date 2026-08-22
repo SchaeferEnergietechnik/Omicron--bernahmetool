@@ -33,6 +33,11 @@ async function findFolders(root, onProgress) {
   const queue = [{ current: root, relative: path.basename(root) }]
   let lastProgressSentAt = 0
 
+  function shouldSkipDirectory(name) {
+    const lowered = name.toLowerCase()
+    return name === 'Protokollentwürfe' || lowered.includes('erledigt')
+  }
+
   function emitProgress(relative, force = false) {
     const now = Date.now()
     // Drosseln, damit IPC bei sehr großen Verzeichnisbäumen nicht überläuft.
@@ -97,7 +102,7 @@ async function findFolders(root, onProgress) {
       }
 
       for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name === 'Protokollentwürfe') continue
+        if (!entry.isDirectory() || shouldSkipDirectory(entry.name)) continue
         queue.push({
           current: path.join(current, entry.name),
           relative: path.join(relative, entry.name),

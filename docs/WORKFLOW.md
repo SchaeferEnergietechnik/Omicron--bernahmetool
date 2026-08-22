@@ -38,16 +38,18 @@ flowchart TD
 ## 2. Cloud-Suche und lokale Kopie
 
 - Der Cloud-Quellordner und alle Unterordner werden nach `*.occ`-Dateien durchsucht.
+- Ordner mit dem Namensbestandteil `erledigt` werden beim Cloud-Scan einschließlich aller Unterordner ausgeschlossen.
 - Jeder Ordner, der mindestens eine `*.occ`-Datei enthält, wird einschließlich seines Inhalts in den lokalen Zielordner kopiert.
 - Die relative Ordnerstruktur unterhalb des Cloud-Quellordners bleibt im lokalen Ziel erhalten, damit gleichnamige Fundordner aus unterschiedlichen Bereichen getrennt bleiben.
 - Bereits bestehende Dateien im lokalen Ziel werden nicht ungeprüft überschrieben. Konflikte werden angezeigt und müssen vom Benutzer entschieden werden.
 - Fehler beim Lesen oder Kopieren werden mit Quell- und Zielpfad protokolliert; die Cloud-Daten bleiben unverändert.
 - Alle folgenden Schritte arbeiten ausschließlich mit den lokalen Kopien.
-- Der Unterordner `Protokollentwürfe` ist von Cloud-Kopie und lokaler Suche ausgeschlossen.
+- Der Unterordner `Protokollentwürfe` ist ebenfalls von Cloud-Kopie und lokaler Suche ausgeschlossen.
 
 ## 3. Rekursive lokale Suche
 
 - Der lokale Zielordner und alle neu bereitgestellten Unterordner werden durchsucht.
+- Unterordner mit `erledigt` im Namen sowie `Protokollentwürfe` werden nicht weiter traversiert.
 - Gesucht werden mindestens `*.occ`, `*.xlsx` und gegebenenfalls `*.xlsm`.
 - Temporäre Excel-Dateien wie `~$Datei.xlsx` werden ignoriert.
 - Nicht lesbare Ordner werden protokolliert, ohne den gesamten Scan zwingend abzubrechen.
