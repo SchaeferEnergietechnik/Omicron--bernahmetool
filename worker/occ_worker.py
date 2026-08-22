@@ -803,7 +803,8 @@ class Worker:
         output_path = excel_path
         inspector_for_fallback: str | None = None
         exam_date_for_fallback: date | None = None
-        customer_assignment_warning: str | None = None
+        customer_assignment_failed_without_template = False
+        template_customer = ""
         try:
             excel = win32com.client.DispatchEx("Excel.Application")
             excel.Visible = True
@@ -814,18 +815,25 @@ class Worker:
             except Exception:
                 pass
             workbook = excel.Workbooks.Open(str(excel_path.resolve()), UpdateLinks=0)
-            workbook.RefreshAll()
-            timeout = time.monotonic() + 180
-            while time.monotonic() < timeout:
-                self.check_cancelled()
-                if excel.CalculationState == 0:
-                    break
-                self.wait(1)
             try:
-                excel.CalculateUntilAsyncQueriesDone()
-            except Exception:
-                pass
-            self.wait(5)
+                workbook.RefreshAll()
+                timeout = time.monotonic() + 180
+                while time.monotonic() < timeout:
+                    self.check_cancelled()
+                    if excel.CalculationState == 0:
+                        break
+                    self.wait(1)
+                try:
+                    excel.CalculateUntilAsyncQueriesDone()
+                except Exception:
+                    pass
+                self.wait(5)
+            except Exception as error:
+                self.emit(
+                    "excel_refresh_warning",
+                    itemId=item.get("id"),
+                    message=f"RefreshAll konnte nicht vollständig abgeschlossen werden: {error}",
+                )
 
             try:
                 inspector_for_fallback = self.checked_inspector_from_checkboxes(workbook)
@@ -838,11 +846,16 @@ class Worker:
                 exam_date_for_fallback = None
 
             try:
+                template_value = workbook.Worksheets(GENERAL_SHEET).Range(CUSTOMER_TARGET_CELL).Value
+                template_customer = str(template_value).strip() if template_value is not None else ""
+            except Exception:
+                template_customer = ""
+
+            try:
                 selected_customer = self.resolve_customer_from_terminexcel(excel, workbook, item)
                 workbook.Worksheets(GENERAL_SHEET).Range(CUSTOMER_TARGET_CELL).Value = selected_customer
                 self.emit("customer_assigned", itemId=item.get("id"), customer=selected_customer)
             except Exception as error:
-                customer_assignment_warning = str(error)
                 self.emit(
                     "customer_assignment_skipped",
                     itemId=item.get("id"),
@@ -850,9 +863,35 @@ class Worker:
                     inspector=inspector_for_fallback,
                     examDate=str(exam_date_for_fallback) if exam_date_for_fallback else None,
                 )
+                if template_customer:
+                    self.emit(
+                        "customer_assignment_fallback_template",
+                        itemId=item.get("id"),
+                        customer=template_customer,
+                    )
+                else:
+                    customer_assignment_failed_without_template = True
 
-            workbook.Worksheets(EXCEL_SHEET).Activate()
-            self.run_macro(excel, workbook.Name, MACRO_PROTOCOL_NO)
+            try:
+                workbook.Worksheets(EXCEL_SHEET).Activate()
+            except Exception as error:
+                self.emit(
+                    "excel_macro_warning",
+                    itemId=item.get("id"),
+                    sheet=EXCEL_SHEET,
+                    message=f"Arbeitsblatt konnte nicht aktiviert werden: {error}",
+                )
+
+            try:
+                self.run_macro(excel, workbook.Name, MACRO_PROTOCOL_NO)
+            except Exception as error:
+                self.emit(
+                    "excel_macro_warning",
+                    itemId=item.get("id"),
+                    macro=MACRO_PROTOCOL_NO,
+                    message=f"Makro fehlgeschlagen: {error}",
+                )
+
             if self.skip_section_macro:
                 self.emit(
                     "excel_macro_skipped",
@@ -884,7 +923,8 @@ class Worker:
                     message=f"Makro fehlgeschlagen: {error}",
                 )
             self.check_cancelled()
-            if customer_assignment_warning:
+
+            if customer_assignment_failed_without_template:
                 project_title = self.fallback_title_from_inspector_and_date(
                     inspector_for_fallback,
                     exam_date_for_fallback,
@@ -892,11 +932,23 @@ class Worker:
                 )
             else:
                 project_title = self.resolve_project_title(workbook, excel_path)
+
             output_path = self.build_output_excel_path(excel_path, project_title)
-            if output_path == excel_path:
+            try:
+                if output_path == excel_path:
+                    workbook.Save()
+                else:
+                    workbook.SaveAs(str(output_path.resolve()), FileFormat=workbook.FileFormat)
+            except Exception as error:
+                self.emit(
+                    "excel_save_warning",
+                    itemId=item.get("id"),
+                    excelPath=str(excel_path),
+                    message=f"SaveAs fehlgeschlagen, versuche Save auf Originaldatei: {error}",
+                )
                 workbook.Save()
-            else:
-                workbook.SaveAs(str(output_path.resolve()), FileFormat=workbook.FileFormat)
+                output_path = excel_path
+
             workbook.Close(SaveChanges=True)
             workbook = None
         finally:
