@@ -34,6 +34,14 @@ LOGO_REFERENCE_CANDIDATES = [
     Path("samples/topics/excel-basis/V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
+# Known edge ranges where validation transfer can fail due to merges/protection quirks.
+CHECKLIST_VALIDATION_EDGE_RANGES = (
+    "$A$14:$D$17",
+    "$B$9:$D$9",
+    "$B$19:$D$19",
+    "$D$65:$D$66",
+)
+
 FORM_CODE = r'''Option Explicit
 Private Const EMAIL_CHECKBOX_NAME As String = "chkDirektEmail"
 
@@ -821,14 +829,61 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
 
             failed_areas = still_failed
 
+        # Deterministic final pass for known edge ranges.
+        forced_recovered = 0
+        for address in CHECKLIST_VALIDATION_EDGE_RANGES:
+            try:
+                src_area = ws_src.Range(address)
+                dst_area = ws_dst.Range(address)
+                if _copy_validation(src_area, dst_area):
+                    forced_recovered += 1
+                    continue
+
+                area_recovered = False
+                for i in range(1, int(src_area.Cells.Count) + 1):
+                    src_cell = src_area.Cells(i)
+                    dst_cell = ws_dst.Cells(src_cell.Row, src_cell.Column)
+
+                    try:
+                        if bool(src_cell.MergeCells):
+                            src_anchor = src_cell.MergeArea.Cells(1, 1)
+                            if str(src_cell.Address) != str(src_anchor.Address):
+                                continue
+                            src_target = src_cell.MergeArea
+                        else:
+                            src_target = src_cell
+                    except Exception:
+                        src_target = src_cell
+
+                    try:
+                        if bool(dst_cell.MergeCells):
+                            dst_anchor = dst_cell.MergeArea.Cells(1, 1)
+                            if str(dst_cell.Address) != str(dst_anchor.Address):
+                                continue
+                            dst_target = dst_cell.MergeArea
+                        else:
+                            dst_target = dst_cell
+                    except Exception:
+                        dst_target = dst_cell
+
+                    if _copy_validation(src_target, dst_target):
+                        area_recovered = True
+
+                if area_recovered:
+                    forced_recovered += 1
+            except Exception:
+                continue
+
         excel_app.CutCopyMode = False
         if failed_areas:
             print(f"Hinweis: {len(failed_areas)} Validierungs-Bereiche konnten nicht 1:1 kopiert werden")
             print(f"Hinweis: Betroffene Bereiche: {', '.join(failed_areas[:8])}")
         if recovered_areas > 0:
             print(f"Hinweis: Zusätzliche Validierungs-Bereiche zellweise repariert: {recovered_areas}")
+        if forced_recovered > 0:
+            print(f"Hinweis: Edge-Validierungs-Bereiche gezielt nachgezogen: {forced_recovered}")
 
-        return transferred_areas + recovered_areas
+        return transferred_areas + recovered_areas + forced_recovered
     finally:
         try:
             excel_app.CutCopyMode = False
