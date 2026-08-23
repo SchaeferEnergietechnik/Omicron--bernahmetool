@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -814,6 +815,30 @@ def update_customer_sheet_excel_com(workbook, source_rows: list[tuple[str, str, 
     return updated, missing
 
 
+def _extract_com_hresult(error: Exception) -> int | None:
+    if not getattr(error, "args", None):
+        return None
+    first_arg = error.args[0]
+    if isinstance(first_arg, int):
+        return first_arg
+    return None
+
+
+def _is_excel_call_rejected(error: Exception) -> bool:
+    # RPC_E_CALL_REJECTED
+    return _extract_com_hresult(error) == -2147418111
+
+
+def _retry_excel_call(callable_fn, attempts: int = 20, wait_seconds: float = 0.35):
+    for attempt in range(1, attempts + 1):
+        try:
+            return callable_fn()
+        except Exception as error:
+            if (not _is_excel_call_rejected(error)) or attempt == attempts:
+                raise
+            time.sleep(wait_seconds)
+
+
 def patch_pdf_form_vba(path: Path, visible: bool) -> None:
     try:
         import pythoncom
@@ -898,8 +923,8 @@ def apply_changes_with_excel_com(
         for kwargs in open_variants:
             try:
                 if kwargs:
-                    return excel_app.Workbooks.Open(workbook_path_str, **kwargs)
-                return excel_app.Workbooks.Open(workbook_path_str)
+                    return _retry_excel_call(lambda kwargs=kwargs: excel_app.Workbooks.Open(workbook_path_str, **kwargs))
+                return _retry_excel_call(lambda: excel_app.Workbooks.Open(workbook_path_str))
             except Exception as error:
                 last_error = error
                 continue
@@ -909,7 +934,7 @@ def apply_changes_with_excel_com(
         raise RuntimeError("Unbekannter Fehler beim Oeffnen der Excel-Datei.")
 
     try:
-        excel = win32com.client.DispatchEx("Excel.Application")
+        excel = _retry_excel_call(lambda: win32com.client.DispatchEx("Excel.Application"))
         excel.Visible = bool(visible)
         excel.DisplayAlerts = False
         excel.AskToUpdateLinks = False
@@ -931,24 +956,26 @@ def apply_changes_with_excel_com(
             shutil.copy2(original_path, temp_workbook_path)
             workbook = _open_workbook(excel, str(temp_workbook_path))
 
-        updated, missing = update_customer_sheet_excel_com(workbook, source_rows)
+        updated, missing = _retry_excel_call(lambda: update_customer_sheet_excel_com(workbook, source_rows))
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
         if reference_logo_path is not None:
-            restored_logos = restore_logos_from_reference(excel, workbook, reference_logo_path)
+            restored_logos = _retry_excel_call(
+                lambda: restore_logos_from_reference(excel, workbook, reference_logo_path)
+            )
             print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
         else:
             print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
 
-        component = workbook.VBProject.VBComponents("frmPDFDruck")
+        component = _retry_excel_call(lambda: workbook.VBProject.VBComponents("frmPDFDruck"))
         module = component.CodeModule
         if module.CountOfLines > 0:
-            module.DeleteLines(1, module.CountOfLines)
-        module.AddFromString(FORM_CODE)
+            _retry_excel_call(lambda: module.DeleteLines(1, module.CountOfLines))
+        _retry_excel_call(lambda: module.AddFromString(FORM_CODE))
 
-        workbook.Save()
-        workbook.Close(SaveChanges=True)
+        _retry_excel_call(lambda: workbook.Save())
+        _retry_excel_call(lambda: workbook.Close(SaveChanges=True))
         workbook = None
 
         if temp_workbook_path is not None:
@@ -957,9 +984,9 @@ def apply_changes_with_excel_com(
         return updated, missing
     finally:
         if workbook is not None:
-            workbook.Close(SaveChanges=False)
+            _retry_excel_call(lambda: workbook.Close(SaveChanges=False))
         if excel is not None:
-            excel.Quit()
+            _retry_excel_call(lambda: excel.Quit())
         pythoncom.CoUninitialize()
         if temp_dir is not None:
             shutil.rmtree(temp_dir, ignore_errors=True)
