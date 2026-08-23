@@ -8,17 +8,15 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 DEFAULT_TARGETS_REAL = [
-    Path("samples/V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20a_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
 DEFAULT_TARGETS_FALLBACK = [
-    Path("samples/V19m_Uebergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20a_Uebergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V20a_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V19m_Uebergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V20a_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
 DEFAULT_SOURCE = Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx")
@@ -519,8 +517,12 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
 
     recursive_hits: list[Path] = []
     for pattern in [
-        "**/*Übergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20c*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20C*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*v20c*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20c*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20C*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*v20c*Uebergeordneter_Entkupplungsschutz*.xlsm",
     ]:
         recursive_hits.extend(sorted(Path(".").glob(pattern)))
 
@@ -533,7 +535,7 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
         return _unique_paths(filtered)
 
     raise FileNotFoundError(
-        "Keine passende Ziel-XLSM gefunden. Bitte mit --targets eine oder mehrere .xlsm-Dateien angeben."
+        "Keine passende V20c-Ziel-XLSM gefunden. Bitte mit --targets die V20c-Datei explizit angeben."
     )
 
 
