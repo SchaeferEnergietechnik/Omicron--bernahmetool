@@ -10,15 +10,15 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 DEFAULT_TARGETS_REAL = [
-    Path("samples/V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
 DEFAULT_TARGETS_FALLBACK = [
-    Path("samples/V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V20c_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("V20c_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
 DEFAULT_SOURCE = Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx")
@@ -66,6 +66,8 @@ Private Sub cmdOK_Click()
     Dim vollDateiname As String
     Dim vollPfad As String
     Dim schutz As String
+    Dim stationPrefix As String
+    Dim wsProt As Worksheet
     Dim exportiertePdfs As Collection
     Set exportiertePdfs = New Collection
 
@@ -80,8 +82,15 @@ Private Sub cmdOK_Click()
         Exit Sub
     End If
 
+    Set wsProt = wb.Sheets("Prüfprotokoll")
+    If IstStationGesperrt(wsProt) Then
+        stationPrefix = "Station-gesperrt_"
+    Else
+        stationPrefix = ""
+    End If
+
     If chkBlatt1.Value = True Then
-        dateiname = wb.Sheets("Allgemeine Angaben").Range("C5").Value & "_" & _
+        dateiname = stationPrefix & wb.Sheets("Allgemeine Angaben").Range("C5").Value & "_" & _
                     wb.Sheets("Prüfprotokoll").Range("H13").Value & "_" & _
                     IIf(schutz = "Entkupplungsschutz", "Übergeordneter-Schutz", "UMZ-Schutz")
 
@@ -96,7 +105,7 @@ Private Sub cmdOK_Click()
     End If
 
     If chkBlatt2.Value = True Then
-        dateiname = wb.Sheets("Allgemeine Angaben").Range("C5").Value & "_" & _
+        dateiname = stationPrefix & wb.Sheets("Allgemeine Angaben").Range("C5").Value & "_" & _
                     wb.Sheets("Prüfprotokoll").Range("H13").Value & "_Wandlerprüfprotokoll"
 
         vollDateiname = DateiMitVersion(pfad, dateiname)
@@ -110,7 +119,7 @@ Private Sub cmdOK_Click()
     End If
 
     If chkBlatt3.Value = True Then
-        dateiname = wb.Sheets("Allgemeine Angaben").Range("C6").Value & "_" & _
+        dateiname = stationPrefix & wb.Sheets("Allgemeine Angaben").Range("C6").Value & "_" & _
                     wb.Sheets("Prüfprotokoll").Range("H13").Value & "_Untergeordneter-Schutz"
 
         vollDateiname = DateiMitVersion(pfad, dateiname)
@@ -161,6 +170,7 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     Dim bemerkungen As String
     Dim betreff As String
     Dim projektname As String
+    Dim protokollLabel As String
     Dim bodyText As String
     Dim htmlBody As String
     Dim logoPath As String
@@ -184,10 +194,11 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     If projektname = "" Then
         projektname = Trim$(CStr(wsAngaben.Range("C5").Value))
     End If
-    betreff = "Prüfprotokolle" & IIf(projektname <> "", " - " & projektname, "")
-    bodyText = ErzeugeStandardMailtext(kundeText, bemerkungen)
+    protokollLabel = IIf(exportiertePdfs.Count = 1, "Schutzprüfprotokoll", "Schutzprüfprotokolle")
+    betreff = protokollLabel & IIf(projektname <> "", " - " & projektname, "")
+    bodyText = ErzeugeStandardMailtext(kundeText, bemerkungen, projektname, exportiertePdfs.Count)
     logoPath = FindeLogoPfad(wb.Path)
-    htmlBody = ErzeugeHtmlMailtext(kundeText, bemerkungen, logoPath)
+    htmlBody = ErzeugeHtmlMailtext(kundeText, bemerkungen, logoPath, projektname, exportiertePdfs.Count)
 
     Dim olApp As Object
     Dim olMail As Object
@@ -227,11 +238,20 @@ outlook_fehler:
     MsgBox "Outlook konnte nicht gestartet werden oder der Entwurf konnte nicht erstellt werden.", vbCritical
 End Sub
 
-Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerkungen As String) As String
+Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerkungen As String, ByVal projektname As String, ByVal anzahlPdfs As Long) As String
     Dim text As String
+    Dim protokollLabel As String
+    Dim projektTeil As String
+
+    protokollLabel = IIf(anzahlPdfs = 1, "Schutzprüfprotokoll", "Schutzprüfprotokolle")
+    If Trim$(projektname) <> "" Then
+        projektTeil = " zum Projekt """ & projektname & """"
+    Else
+        projektTeil = ""
+    End If
 
     text = "Sehr geehrte Damen und Herren," & vbCrLf & vbCrLf & _
-        "anbei erhalten Sie die aktuellen Prüfprotokolle als PDF-Anhang." & vbCrLf & _
+        "anbei erhalten Sie " & IIf(anzahlPdfs = 1, "das aktuelle ", "die aktuellen ") & protokollLabel & projektTeil & " als PDF-Anhang." & vbCrLf & _
         "Bitte prüfen Sie die Unterlagen und melden Sie sich gerne bei Rückfragen." & vbCrLf & vbCrLf
 
     If Trim$(bemerkungen) <> "" Then
@@ -252,15 +272,23 @@ Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerk
     ErzeugeStandardMailtext = text
 End Function
 
-Private Function ErzeugeHtmlMailtext(ByVal kundeText As String, ByVal bemerkungen As String, ByVal logoPath As String) As String
+Private Function ErzeugeHtmlMailtext(ByVal kundeText As String, ByVal bemerkungen As String, ByVal logoPath As String, ByVal projektname As String, ByVal anzahlPdfs As Long) As String
     Dim text As String
     Dim bemerkHtml As String
+    Dim protokollLabel As String
+    Dim projektTeil As String
 
     bemerkHtml = Replace(HTMLEncode(bemerkungen), vbCrLf, "<br>")
+    protokollLabel = IIf(anzahlPdfs = 1, "Schutzprüfprotokoll", "Schutzprüfprotokolle")
+    If Trim$(projektname) <> "" Then
+        projektTeil = " zum Projekt &bdquo;" & HTMLEncode(projektname) & "&ldquo;"
+    Else
+        projektTeil = ""
+    End If
 
     text = "<html><body style='font-family:Calibri,Arial,sans-serif;font-size:11pt;'>" & _
            "<p>Sehr geehrte Damen und Herren,</p>" & _
-            "<p>anbei erhalten Sie die aktuellen Prüfprotokolle als PDF-Anhang.<br>" & _
+             "<p>anbei erhalten Sie " & IIf(anzahlPdfs = 1, "das aktuelle ", "die aktuellen ") & HTMLEncode(protokollLabel) & projektTeil & " als PDF-Anhang.<br>" & _
             "Bitte prüfen Sie die Unterlagen und melden Sie sich gerne bei Rückfragen.</p>"
 
     If Trim$(bemerkungen) <> "" Then
@@ -296,6 +324,21 @@ Private Function HTMLEncode(ByVal text As String) As String
     t = Replace(t, ">", "&gt;")
     t = Replace(t, Chr(34), "&quot;")
     HTMLEncode = t
+End Function
+
+Private Function IstStationGesperrt(ByVal wsProt As Worksheet) As Boolean
+    Dim zeile As Long
+    Dim statusWert As String
+
+    For zeile = 167 To 175
+        statusWert = Trim$(CStr(wsProt.Cells(zeile, "J").Value))
+        If StrComp(statusWert, "NICHT OK", vbTextCompare) = 0 Then
+            IstStationGesperrt = True
+            Exit Function
+        End If
+    Next zeile
+
+    IstStationGesperrt = False
 End Function
 
 Private Function FindeLogoPfad(ByVal basisPfad As String) As String
@@ -521,12 +564,12 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
 
     recursive_hits: list[Path] = []
     for pattern in [
-        "**/*V20c*Übergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*V20C*Übergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*v20c*Übergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*V20c*Uebergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*V20C*Uebergeordneter_Entkupplungsschutz*.xlsm",
-        "**/*v20c*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20d*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20D*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*v20d*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20d*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20D*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*v20d*Uebergeordneter_Entkupplungsschutz*.xlsm",
     ]:
         recursive_hits.extend(sorted(Path(".").glob(pattern)))
 
@@ -539,7 +582,7 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
         return _unique_paths(filtered)
 
     raise FileNotFoundError(
-        "Keine passende V20c-Ziel-XLSM gefunden. Bitte mit --targets die V20c-Datei explizit angeben."
+        "Keine passende V20d-Ziel-XLSM gefunden. Bitte mit --targets die V20d-Datei explizit angeben."
     )
 
 
