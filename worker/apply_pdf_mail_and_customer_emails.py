@@ -851,12 +851,12 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Map "!" from checklist-linked fields to "NICHT OK" so existing warning semantics apply.
     formula_updates = {
-        "C105": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!I70=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!J70=\"!\"),\"NICHT OK\",\"\"))",
-        "C106": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!K70=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!L70=\"!\"),\"NICHT OK\",\"\"))",
-        "C107": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!I71=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!J71=\"!\"),\"NICHT OK\",\"\"))",
-        "C108": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!K71=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!L71=\"!\"),\"NICHT OK\",\"\"))",
-        "C114": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!I72=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!J72=\"!\"),\"NICHT OK\",\"\"))",
-        "C115": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!K72=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!L72=\"!\"),\"NICHT OK\",\"\"))",
+        "C105": "=IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!J70=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!I70=TRUE),\"x\",\"\"))",
+        "C106": "=IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!L70=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!K70=TRUE),\"x\",\"\"))",
+        "C107": "=IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!J71=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!I71=TRUE),\"x\",\"\"))",
+        "C108": "=IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!L71=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!K71=TRUE),\"x\",\"\"))",
+        "C114": "=IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!J72=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!I72=TRUE),\"x\",\"\"))",
+        "C115": "=IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!L72=\"!\"),\"NICHT OK\",IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!K72=TRUE),\"x\",\"\"))",
         "C109": "=IF('Schutzprüf-Checkliste'!E74=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E74=\"!\",\"NICHT OK\",\"\"))",
     }
     for cell, formula in formula_updates.items():
@@ -864,41 +864,44 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Ensure description rows in Abschlussbemerkungen are also shown for "!".
     protokoll_formula_updates = {
-        "A169": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!J70=\"!\",'Schutzprüf-Checkliste'!I70=TRUE),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
-        "A170": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!L70=\"!\",'Schutzprüf-Checkliste'!K70=TRUE),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
-        "A171": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!J71=\"!\",'Schutzprüf-Checkliste'!I71=TRUE),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A172": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!L71=\"!\",'Schutzprüf-Checkliste'!K71=TRUE),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A173": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!J72=\"!\",'Schutzprüf-Checkliste'!I72=TRUE),'Allgemeine Angaben'!A114,\"\")",
-        "A174": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!L72=\"!\",'Schutzprüf-Checkliste'!K72=TRUE),'Allgemeine Angaben'!A115,\"\")",
+        "A169": "=IF(OR(J169=\"x\",J169=\"NICHT OK\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
+        "A170": "=IF(OR(J170=\"x\",J170=\"NICHT OK\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
+        "A171": "=IF(OR(J171=\"x\",J171=\"NICHT OK\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A172": "=IF(OR(J172=\"x\",J172=\"NICHT OK\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A173": "=IF(OR(J173=\"x\",J173=\"NICHT OK\"),'Allgemeine Angaben'!A114,\"\")",
+        "A174": "=IF(OR(J174=\"x\",J174=\"NICHT OK\"),'Allgemeine Angaben'!A115,\"\")",
         "A182": "=IF(OR('Schutzprüf-Checkliste'!E74=\"x\",'Schutzprüf-Checkliste'!E74=\"!\"),\"DC USV für übergeordneter Schutz/ggfs. UMZ-Schutz in Ordnung\",\"\")",
     }
     for cell, formula in protokoll_formula_updates.items():
         ws_protokoll.Range(cell).Formula = formula
 
     # Existing red rule covers J168:J175. Add same semantic rule for J182 (linked to row 74).
-    target_cell = ws_protokoll.Range("J182")
-    has_nicht_ok_rule = False
-    for i in range(1, int(target_cell.FormatConditions.Count) + 1):
-        rule = target_cell.FormatConditions(i)
-        try:
-            if int(rule.Type) == 1 and int(rule.Operator) == 3:
-                formula = str(rule.Formula1).replace("=", "").replace('"', "").strip().upper()
-                if formula == "NICHT OK":
-                    has_nicht_ok_rule = True
-                    break
-        except Exception:
-            continue
+    try:
+        target_cell = ws_protokoll.Range("J182")
+        has_nicht_ok_rule = False
+        for i in range(1, int(target_cell.FormatConditions.Count) + 1):
+            rule = target_cell.FormatConditions(i)
+            try:
+                if int(rule.Type) == 1 and int(rule.Operator) == 3:
+                    formula = str(rule.Formula1).replace("=", "").replace('"', "").strip().upper()
+                    if formula == "NICHT OK":
+                        has_nicht_ok_rule = True
+                        break
+            except Exception:
+                continue
 
-    if not has_nicht_ok_rule:
-        added_rule = target_cell.FormatConditions.Add(Type=1, Operator=3, Formula1='="NICHT OK"')
-        try:
-            ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
-            added_rule.Font.Color = ref_rule.Font.Color
-            added_rule.Interior.Color = ref_rule.Interior.Color
-            added_rule.StopIfTrue = ref_rule.StopIfTrue
-        except Exception:
-            # Style copy is best effort; semantic condition is the functional requirement.
-            pass
+        if not has_nicht_ok_rule:
+            added_rule = target_cell.FormatConditions.Add(Type=1, Operator=3, Formula1='="NICHT OK"')
+            try:
+                ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
+                added_rule.Font.Color = ref_rule.Font.Color
+                added_rule.Interior.Color = ref_rule.Interior.Color
+                added_rule.StopIfTrue = ref_rule.StopIfTrue
+            except Exception:
+                # Style copy is best effort; semantic condition is the functional requirement.
+                pass
+    except Exception as error:
+        print(f"Hinweis: CF-Regel fuer J182 konnte nicht gesetzt/geprueft werden: {error}")
 
     # Show station lock message in row 3 when any lower status is NICHT OK.
     lock_message = "Station gesperrt - Nicht alle Schutzfunktionen in Ordnung"
@@ -910,29 +913,32 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
     ws_protokoll.Range("A3").Formula = lock_formula
 
     lock_cf_formula = '=OR(COUNTIF($J$167:$J$175,"NICHT OK")>0,$J$182="NICHT OK",$J$169="NICHT OK",$J$170="NICHT OK",$J$171="NICHT OK",$J$172="NICHT OK",$J$173="NICHT OK",$J$174="NICHT OK")'
-    a3_cell = ws_protokoll.Range("A3")
-    has_lock_cf_rule = False
-    for i in range(1, int(a3_cell.FormatConditions.Count) + 1):
-        rule = a3_cell.FormatConditions(i)
-        try:
-            if int(rule.Type) == 2:
-                if str(rule.Formula1).replace(" ", "") == lock_cf_formula.replace(" ", ""):
-                    has_lock_cf_rule = True
-                    break
-        except Exception:
-            continue
+    try:
+        a3_cell = ws_protokoll.Range("A3")
+        has_lock_cf_rule = False
+        for i in range(1, int(a3_cell.FormatConditions.Count) + 1):
+            rule = a3_cell.FormatConditions(i)
+            try:
+                if int(rule.Type) == 2:
+                    if str(rule.Formula1).replace(" ", "") == lock_cf_formula.replace(" ", ""):
+                        has_lock_cf_rule = True
+                        break
+            except Exception:
+                continue
 
-    if not has_lock_cf_rule:
-        lock_rule = a3_cell.FormatConditions.Add(Type=2, Formula1=lock_cf_formula)
-        try:
-            ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
-            lock_rule.Font.Color = ref_rule.Font.Color
-            lock_rule.Interior.Color = ref_rule.Interior.Color
-            lock_rule.StopIfTrue = ref_rule.StopIfTrue
-        except Exception:
-            # Style copy is best effort; enforce red background if no reference style is available.
-            lock_rule.Interior.Color = 255
-            lock_rule.Font.Color = 16777215
+        if not has_lock_cf_rule:
+            lock_rule = a3_cell.FormatConditions.Add(Type=2, Formula1=lock_cf_formula)
+            try:
+                ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
+                lock_rule.Font.Color = ref_rule.Font.Color
+                lock_rule.Interior.Color = ref_rule.Interior.Color
+                lock_rule.StopIfTrue = ref_rule.StopIfTrue
+            except Exception:
+                # Style copy is best effort; enforce red background if no reference style is available.
+                lock_rule.Interior.Color = 255
+                lock_rule.Font.Color = 16777215
+    except Exception as error:
+        print(f"Hinweis: CF-Regel fuer A3 konnte nicht gesetzt/geprueft werden: {error}")
 
 
 def get_abschlussbemerkungen_debug_snapshot(workbook) -> dict[str, str]:
