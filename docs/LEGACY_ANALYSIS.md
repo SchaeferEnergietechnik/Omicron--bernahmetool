@@ -2,7 +2,7 @@
 
 ## Analysierter Bestand
 
-- Python-Programm: `legacy/occ_export_sehr gut mit Excel übernahme-ohne pdf.py`
+- Python-Programm: `samples/topics/excel-basis/legacy-python/occ_export_sehr_gut_mit_Excel_uebernahme-ohne_pdf.py`
 - Beispielmappe: `samples/V19g_Übergeordneter_Entkupplungsschutz.xlsm`
 - Omicron-Beispiele:
   - `samples/V24_NAP_V2_Bensheim.occ`

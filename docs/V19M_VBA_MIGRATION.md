@@ -49,7 +49,7 @@ Die Fachlogik und verwendeten Zellen bleiben gleich.
 Alternativ kann die Migration für die beiden Beispiel-Dateien automatisiert per Excel-COM erfolgen:
 
 ```powershell
-python worker\migrate_v19g_vba_to_v19m.py
+python samples/topics/excel-basis/legacy-python/migrate_v19g_vba_to_v19m.py
 ```
 
 Das Skript:
