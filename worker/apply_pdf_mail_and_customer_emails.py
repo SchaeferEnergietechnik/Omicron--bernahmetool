@@ -233,15 +233,7 @@ Private Function CollectPageBreakRows(ByVal ws As Worksheet, ByRef rows() As Lon
     CollectPageBreakRows = count
 End Function
 
-Private Function CollectManualBreakCandidates(
-    ByVal ws As Worksheet,
-    ByRef autoBreakRows() As Long,
-    ByVal autoBreakCount As Long,
-    ByRef sectionStarts() As Long,
-    ByVal sectionCount As Long,
-    ByVal lastRow As Long,
-    ByRef resultRows() As Long
-) As Long
+Private Function CollectManualBreakCandidates(ByVal ws As Worksheet, ByRef autoBreakRows() As Long, ByVal autoBreakCount As Long, ByRef sectionStarts() As Long, ByVal sectionCount As Long, ByVal lastRow As Long, ByRef resultRows() As Long) As Long
     Dim i As Long
     Dim pageStart As Long
     Dim breakRow As Long
