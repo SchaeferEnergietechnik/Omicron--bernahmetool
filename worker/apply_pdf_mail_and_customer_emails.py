@@ -24,6 +24,12 @@ DEFAULT_TARGETS_FALLBACK = [
 DEFAULT_SOURCE = Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx")
 CUSTOMER_SHEET = "Kunden"
 SOURCE_CANDIDATE_SHEETS = ("Kundenadressen", "Kunden")
+LOGO_REFERENCE_CANDIDATES = [
+    Path("samples/V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/V19g_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
+]
 
 FORM_CODE = r'''Option Explicit
 Private Const EMAIL_CHECKBOX_NAME As String = "chkDirektEmail"
@@ -154,6 +160,7 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     Dim emailTo As String
     Dim bemerkungen As String
     Dim betreff As String
+    Dim projektname As String
     Dim bodyText As String
     Dim htmlBody As String
     Dim logoPath As String
@@ -173,7 +180,11 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
 
     bemerkungen = HoleBemerkungenAusCheckliste(wsCheck)
 
-    betreff = "Pruefprotokoll " & CStr(wsAngaben.Range("C5").Value)
+    projektname = Trim$(CStr(wsCheck.Range("B3").Value))
+    If projektname = "" Then
+        projektname = Trim$(CStr(wsAngaben.Range("C5").Value))
+    End If
+    betreff = "Pruefprotokolle" & IIf(projektname <> "", " - " & projektname, "")
     bodyText = ErzeugeStandardMailtext(kundeText, bemerkungen)
     logoPath = FindeLogoPfad(wb.Path)
     htmlBody = ErzeugeHtmlMailtext(kundeText, bemerkungen, logoPath)
@@ -220,7 +231,8 @@ Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerk
     Dim text As String
 
     text = "Sehr geehrte Damen und Herren," & vbCrLf & vbCrLf & _
-        "bitte entnehmen Sie dem Anhang die Rechnungen." & vbCrLf & vbCrLf
+        "anbei erhalten Sie die aktuellen Pruefprotokolle als PDF-Anhang." & vbCrLf & _
+        "Bitte pruefen Sie die Unterlagen und melden Sie sich gerne bei Rueckfragen." & vbCrLf & vbCrLf
 
     If Trim$(bemerkungen) <> "" Then
         text = text & "Bemerkungen aus der Checkliste:" & vbCrLf & bemerkungen & vbCrLf & vbCrLf
@@ -228,13 +240,7 @@ Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerk
 
     text = text & "Herzlichen Dank." & vbCrLf & vbCrLf & _
         "Mit freundlichen Gruessen" & vbCrLf & vbCrLf & _
-        "Gunnar Schaefer" & vbCrLf & vbCrLf & _
-        "Dipl.-Ing. Elektrotechnik" & vbCrLf & vbCrLf & _
-        "G.E.S. Energietechnik GmbH" & vbCrLf & vbCrLf & _
-        "Ferchlipp 16" & vbCrLf & _
-        "39615 Altmaerkische Wische" & vbCrLf & vbCrLf & _
-        "E-Mail g.schaefer@ges-energietechnik.com" & vbCrLf & _
-        "Internet www.ges-energietechnik.com" & vbCrLf & vbCrLf & _
+        "Ihr Team von G.E.S. Energietechnik GmbH" & vbCrLf & vbCrLf & _
         "Der Inhalt dieser Email ist ausschliesslich fuer den bezeichneten Adressaten bestimmt." & vbCrLf & _
         "Falls Sie nicht der vorgesehene Adressat dieser Email oder dessen Vertreter sein sollten," & vbCrLf & _
         "so beachten Sie bitte, dass jede Form der Kenntnisnahme, Veroeffentlichung," & vbCrLf & _
@@ -254,7 +260,8 @@ Private Function ErzeugeHtmlMailtext(ByVal kundeText As String, ByVal bemerkunge
 
     text = "<html><body style='font-family:Calibri,Arial,sans-serif;font-size:11pt;'>" & _
            "<p>Sehr geehrte Damen und Herren,</p>" & _
-           "<p>bitte entnehmen Sie dem Anhang die Rechnungen.</p>"
+            "<p>anbei erhalten Sie die aktuellen Pruefprotokolle als PDF-Anhang.<br>" & _
+            "Bitte pruefen Sie die Unterlagen und melden Sie sich gerne bei Rueckfragen.</p>"
 
     If Trim$(bemerkungen) <> "" Then
         text = text & "<p><b>Bemerkungen aus der Checkliste:</b><br>" & bemerkHtml & "</p>"
@@ -262,12 +269,7 @@ Private Function ErzeugeHtmlMailtext(ByVal kundeText As String, ByVal bemerkunge
 
     text = text & "<p>Herzlichen Dank.</p>" & _
                   "<p>Mit freundlichen Gruessen</p>" & _
-                  "<p>Gunnar Schaefer</p>" & _
-                  "<p>Dipl.-Ing. Elektrotechnik</p>" & _
-                  "<p>G.E.S. Energietechnik GmbH</p>" & _
-                  "<p>Ferchlipp 16<br>39615 Altmaerkische Wische</p>" & _
-                  "<p>E-Mail <a href='mailto:g.schaefer@ges-energietechnik.com'>g.schaefer@ges-energietechnik.com</a><br>" & _
-                  "Internet <a href='http://www.ges-energietechnik.com'>www.ges-energietechnik.com</a></p>" & _
+                  "<p>Ihr Team von G.E.S. Energietechnik GmbH</p>" & _
                   "<p style='font-size:9pt;color:#555;'>" & _
                   "Der Inhalt dieser Email ist ausschliesslich fuer den bezeichneten Adressaten bestimmt.<br>" & _
                   "Falls Sie nicht der vorgesehene Adressat dieser Email oder dessen Vertreter sein sollten,<br>" & _
@@ -541,6 +543,81 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
     )
 
 
+def resolve_logo_reference_path(target_path: Path) -> Path | None:
+    for candidate in LOGO_REFERENCE_CANDIDATES:
+        if candidate.exists() and candidate.resolve() != target_path.resolve():
+            return candidate
+
+    recursive_hits = sorted(Path(".").glob("**/*V19*Übergeordneter_Entkupplungsschutz*.xlsm"))
+    for hit in recursive_hits:
+        if hit.resolve() != target_path.resolve():
+            return hit
+
+    recursive_hits_ascii = sorted(Path(".").glob("**/*V19*Uebergeordneter_Entkupplungsschutz*.xlsm"))
+    for hit in recursive_hits_ascii:
+        if hit.resolve() != target_path.resolve():
+            return hit
+
+    return None
+
+
+def _shape_intersects_d7_e7(shape) -> bool:
+    try:
+        tl_row = int(shape.TopLeftCell.Row)
+        tl_col = int(shape.TopLeftCell.Column)
+        br_row = int(shape.BottomRightCell.Row)
+        br_col = int(shape.BottomRightCell.Column)
+    except Exception:
+        return False
+
+    return not (br_row < 7 or tl_row > 7 or br_col < 4 or tl_col > 5)
+
+
+def restore_logos_from_reference(excel_app, target_workbook, reference_path: Path) -> int:
+    ref_workbook = None
+    restored = 0
+    try:
+        ref_workbook = excel_app.Workbooks.Open(str(reference_path.resolve()), ReadOnly=True, AddToMru=False)
+        ws_src = ref_workbook.Worksheets("Allgemeine Angaben")
+        ws_dst = target_workbook.Worksheets("Allgemeine Angaben")
+
+        # Restore possible formula/text content in D7:E7.
+        ws_dst.Range("D7:E7").Formula = ws_src.Range("D7:E7").Formula
+
+        # Remove existing shapes in D7:E7 before re-pasting from V19 reference.
+        for i in range(int(ws_dst.Shapes.Count), 0, -1):
+            shp = ws_dst.Shapes(i)
+            if _shape_intersects_d7_e7(shp):
+                try:
+                    shp.Delete()
+                except Exception:
+                    pass
+
+        for i in range(1, int(ws_src.Shapes.Count) + 1):
+            shp = ws_src.Shapes(i)
+            if not _shape_intersects_d7_e7(shp):
+                continue
+
+            left = float(shp.Left)
+            top = float(shp.Top)
+            width = float(shp.Width)
+            height = float(shp.Height)
+
+            shp.Copy()
+            ws_dst.Paste()
+            pasted = ws_dst.Shapes(int(ws_dst.Shapes.Count))
+            pasted.Left = left
+            pasted.Top = top
+            pasted.Width = width
+            pasted.Height = height
+            restored += 1
+
+        return restored
+    finally:
+        if ref_workbook is not None:
+            ref_workbook.Close(SaveChanges=False)
+
+
 def backup_file(path: Path, suffix: str) -> Path:
     backup_path = path.with_name(f"{path.stem}{suffix}{path.suffix}")
     shutil.copy2(path, backup_path)
@@ -812,6 +889,14 @@ def apply_changes_with_excel_com(
             workbook = _open_workbook(excel, str(temp_workbook_path))
 
         updated, missing = update_customer_sheet_excel_com(workbook, source_rows)
+
+        reference_logo_path = resolve_logo_reference_path(path)
+        restored_logos = 0
+        if reference_logo_path is not None:
+            restored_logos = restore_logos_from_reference(excel, workbook, reference_logo_path)
+            print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
+        else:
+            print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
 
         component = workbook.VBProject.VBComponents("frmPDFDruck")
         module = component.CodeModule
