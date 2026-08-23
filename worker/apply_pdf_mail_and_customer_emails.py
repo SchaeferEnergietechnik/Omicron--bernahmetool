@@ -508,11 +508,6 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     kundeText = CStr(wsAngaben.Range("C2").Value)
     emailTo = HoleEmailAusKundenblatt(wsKunden, kundeText)
 
-    If Trim$(emailTo) = "" Then
-        MsgBox "Keine E-Mail-Adresse fuer den Kunden gefunden. Bitte im Blatt 'Kunden' in Spalte B pflegen.", vbExclamation
-        Exit Sub
-    End If
-
     bemerkungen = HoleBemerkungenAusCheckliste(wsCheck)
 
     projektname = Trim$(CStr(wsCheck.Range("B3").Value))
@@ -534,7 +529,11 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     Set olMail = olApp.CreateItem(0)
 
     With olMail
-        .To = emailTo
+        If Trim$(emailTo) <> "" Then
+            .To = emailTo
+        Else
+            .To = ""
+        End If
         .Subject = betreff
         .Body = bodyText
 
@@ -555,6 +554,10 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
 
         .Display
     End With
+
+    If Trim$(emailTo) = "" Then
+        MsgBox "Keine E-Mail-Adresse gefunden. Entwurf wurde ohne Empfänger geöffnet.", vbExclamation
+    End If
 
     MsgBox "Outlook-E-Mail wurde vorbereitet.", vbInformation
     Exit Sub
@@ -1011,6 +1014,121 @@ def restore_logos_from_reference(excel_app, target_workbook, reference_path: Pat
 
         return restored
     finally:
+        if ref_workbook is not None:
+            ref_workbook.Close(SaveChanges=False)
+
+
+def restore_import_infrastructure_from_reference(excel_app, target_workbook, reference_path: Path) -> dict[str, int]:
+    """Best-effort restore of measurement import structure from a V19 reference workbook."""
+    ref_workbook = None
+    summary = {
+        "sheetsSynced": 0,
+        "tablesRecreated": 0,
+        "connectionsCloned": 0,
+    }
+    source_sheets = ("Measurements", "Seq_Measurement", "PlsRmp_Measurement")
+
+    try:
+        ref_workbook = excel_app.Workbooks.Open(str(reference_path.resolve()), ReadOnly=True, AddToMru=False)
+
+        for sheet_name in source_sheets:
+            try:
+                ws_src = ref_workbook.Worksheets(sheet_name)
+                ws_dst = target_workbook.Worksheets(sheet_name)
+            except Exception:
+                continue
+
+            try:
+                ws_dst.Cells.Clear()
+            except Exception:
+                pass
+
+            try:
+                ws_src.UsedRange.Copy()
+                ws_dst.Range("A1").PasteSpecial(Paste=-4104)  # xlPasteAll
+                ws_dst.Range("A1").PasteSpecial(Paste=8)  # xlPasteColumnWidths
+                excel_app.CutCopyMode = False
+            except Exception:
+                continue
+
+            summary["sheetsSynced"] += 1
+
+            try:
+                for i in range(int(ws_dst.ListObjects.Count), 0, -1):
+                    ws_dst.ListObjects(i).Delete()
+            except Exception:
+                pass
+
+            try:
+                for i in range(1, int(ws_src.ListObjects.Count) + 1):
+                    src_table = ws_src.ListObjects(i)
+                    src_range_address = str(src_table.Range.Address)
+                    target_range = ws_dst.Range(src_range_address)
+                    list_object = ws_dst.ListObjects.Add(SourceType=1, Source=target_range, XlListObjectHasHeaders=1)
+                    list_object.Name = str(src_table.Name)
+                    try:
+                        list_object.TableStyle = src_table.TableStyle
+                    except Exception:
+                        pass
+                    summary["tablesRecreated"] += 1
+            except Exception:
+                pass
+
+        try:
+            existing_names: set[str] = set()
+            for i in range(1, int(target_workbook.Connections.Count) + 1):
+                existing_names.add(str(target_workbook.Connections(i).Name).strip().lower())
+
+            for i in range(1, int(ref_workbook.Connections.Count) + 1):
+                source_connection = ref_workbook.Connections(i)
+                connection_name = str(source_connection.Name).strip()
+                if not connection_name or connection_name.lower() in existing_names:
+                    continue
+
+                description = ""
+                try:
+                    description = str(source_connection.Description)
+                except Exception:
+                    description = ""
+
+                added = False
+                try:
+                    oledb = source_connection.OLEDBConnection
+                    connection_string = str(oledb.Connection)
+                    command_text = oledb.CommandText
+                    command_type = int(oledb.CommandType)
+                    try:
+                        target_workbook.Connections.Add2(
+                            connection_name,
+                            description,
+                            connection_string,
+                            command_text,
+                            command_type,
+                        )
+                    except Exception:
+                        target_workbook.Connections.Add(
+                            connection_name,
+                            description,
+                            connection_string,
+                            command_text,
+                            command_type,
+                        )
+                    added = True
+                except Exception:
+                    added = False
+
+                if added:
+                    existing_names.add(connection_name.lower())
+                    summary["connectionsCloned"] += 1
+        except Exception:
+            pass
+
+        return summary
+    finally:
+        try:
+            excel_app.CutCopyMode = False
+        except Exception:
+            pass
         if ref_workbook is not None:
             ref_workbook.Close(SaveChanges=False)
 
@@ -1865,6 +1983,19 @@ def apply_changes_with_excel_com(
         dropdown_reference = dropdown_reference_path
         if restore_dropdowns and (dropdown_reference is None or not dropdown_reference.exists()):
             dropdown_reference = reference_logo_path
+        restored_import_infrastructure = {"sheetsSynced": 0, "tablesRecreated": 0, "connectionsCloned": 0}
+
+        if reference_logo_path is not None:
+            print(f"{path}: Schritt Import-Infrastruktur aus V19 wiederherstellen ...")
+            restored_import_infrastructure = _retry_excel_call(
+                lambda: restore_import_infrastructure_from_reference(excel, workbook, reference_logo_path)
+            )
+            print(
+                f"{path}: Import-Infrastruktur: Sheets={restored_import_infrastructure['sheetsSynced']}, "
+                f"Tabellen={restored_import_infrastructure['tablesRecreated']}, "
+                f"Connections={restored_import_infrastructure['connectionsCloned']}"
+            )
+
         restored_logos = 0
         restored_dropdown_areas = 0
         restored_x14_dropdowns = 0
