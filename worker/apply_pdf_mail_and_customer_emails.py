@@ -1642,6 +1642,49 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
         print(f"Hinweis: CF-Regel fuer A3 konnte nicht gesetzt/geprueft werden: {error}")
 
 
+def repair_daten_de_ref_formulas(workbook) -> int:
+    """Repariert defekte MATCH-Bezuege in Daten!D:E anhand des V19m-Musters."""
+    try:
+        ws = workbook.Worksheets("Daten")
+    except Exception:
+        return 0
+
+    try:
+        last_row_c = int(ws.Cells(ws.Rows.Count, 3).End(-4162).Row)  # xlUp
+        last_row_d = int(ws.Cells(ws.Rows.Count, 4).End(-4162).Row)  # xlUp
+        last_row_e = int(ws.Cells(ws.Rows.Count, 5).End(-4162).Row)  # xlUp
+        last_row = max(last_row_c, last_row_d, last_row_e)
+    except Exception:
+        return 0
+
+    fixed = 0
+    for row in range(1, last_row + 1):
+        for col in (4, 5):
+            cell = ws.Cells(row, col)
+            formula = cell.Formula
+            if formula is None:
+                continue
+
+            formula_text = str(formula)
+            if "MATCH(" not in formula_text.upper():
+                continue
+            if "#REF!" not in formula_text.upper() and "#BEZUG!" not in formula_text.upper():
+                continue
+
+            repaired = (
+                formula_text
+                .replace("(#REF!)", "(Measurements[MeasurementName])")
+                .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
+                .replace("#REF!", "Measurements[MeasurementName]")
+                .replace("#BEZUG!", "Measurements[MeasurementName]")
+            )
+            if repaired != formula_text:
+                cell.Formula = repaired
+                fixed += 1
+
+    return fixed
+
+
 def get_abschlussbemerkungen_debug_snapshot(workbook) -> dict[str, str]:
     ws_angaben = workbook.Worksheets("Allgemeine Angaben")
     ws_protokoll = workbook.Worksheets("Prüfprotokoll")
@@ -1796,6 +1839,10 @@ def apply_changes_with_excel_com(
                 "Fehler in Schritt 'Abschlussbemerkungen/NICHT-OK-Logik'. "
                 f"Original: {error}"
             ) from error
+
+            print(f"{path}: Schritt Daten!D:E-Bezuege reparieren ...")
+            repaired_daten_refs = _retry_excel_call(lambda: repair_daten_de_ref_formulas(workbook))
+            print(f"{path}: Reparierte Formeln in Daten!D:E: {repaired_daten_refs}")
 
         print(f"{path}: Schritt Debug-Snapshot ...")
         try:
