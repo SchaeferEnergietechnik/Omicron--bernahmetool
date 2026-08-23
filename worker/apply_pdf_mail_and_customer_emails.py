@@ -1881,6 +1881,7 @@ def apply_changes_with_excel_com(
                 "IgnoreReadOnlyRecommended": True,
                 "AddToMru": False,
                 "Local": True,
+                "Notify": False,
             },
             {
                 "UpdateLinks": 0,
@@ -1890,6 +1891,15 @@ def apply_changes_with_excel_com(
                 "Local": True,
                 # 1 = xlRepairFile
                 "CorruptLoad": 1,
+                "Notify": False,
+            },
+            {
+                "UpdateLinks": 0,
+                "ReadOnly": True,
+                "IgnoreReadOnlyRecommended": True,
+                "AddToMru": False,
+                "Local": True,
+                "Notify": False,
             },
         ]
 
@@ -1906,6 +1916,9 @@ def apply_changes_with_excel_com(
             raise last_error
         raise RuntimeError("Unbekannter Fehler beim Oeffnen der Excel-Datei.")
 
+    def _lock_file_path_for(workbook_path: Path) -> Path:
+        return workbook_path.with_name(f"~${workbook_path.name}")
+
     try:
         excel = _retry_excel_call(lambda: win32com.client.DispatchEx("Excel.Application"))
         excel.Visible = bool(visible)
@@ -1920,14 +1933,35 @@ def apply_changes_with_excel_com(
         except Exception:
             pass
 
+        lock_file = _lock_file_path_for(original_path)
+        if lock_file.exists():
+            raise RuntimeError(
+                f"Die Zieldatei ist in Excel geoeffnet/gesperrt: {original_path}. "
+                "Bitte Arbeitsmappe in Excel schliessen und den Lauf erneut starten."
+            )
+
         try:
             workbook = _open_workbook(excel, workbook_path)
-        except Exception:
+        except Exception as first_open_error:
             # Fallback: copy to temp path with ASCII-only filename and retry there.
             temp_dir = tempfile.mkdtemp(prefix="ges_excel_open_")
             temp_workbook_path = Path(temp_dir) / "workbook.xlsm"
-            shutil.copy2(original_path, temp_workbook_path)
-            workbook = _open_workbook(excel, str(temp_workbook_path))
+            try:
+                shutil.copy2(original_path, temp_workbook_path)
+            except Exception as copy_error:
+                raise RuntimeError(
+                    "Excel-Datei konnte nicht geoeffnet werden und die Fallback-Kopie "
+                    f"konnte nicht erstellt werden: {copy_error}"
+                ) from first_open_error
+
+            try:
+                workbook = _open_workbook(excel, str(temp_workbook_path))
+            except Exception as second_open_error:
+                raise RuntimeError(
+                    "Excel-Datei konnte weder direkt noch als Fallback-Kopie geoeffnet werden. "
+                    "Moegliche Ursachen: Datei noch in Excel geoeffnet, blockiert oder intern beschaedigt. "
+                    f"Direktfehler: {first_open_error} | Fallback-Fehler: {second_open_error}"
+                ) from second_open_error
 
         print(f"{path}: Schritt Kundenblatt aktualisieren ...")
         updated, missing = _retry_excel_call(lambda: update_customer_sheet_excel_com(workbook, source_rows))
