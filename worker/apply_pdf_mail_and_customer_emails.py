@@ -837,7 +837,7 @@ def parse_args() -> argparse.Namespace:
         "--targets",
         type=Path,
         nargs="+",
-        default=DEFAULT_TARGETS_REAL,
+        default=None,
         help="Ziel-xlsm-Dateien, die angepasst werden sollen",
     )
     parser.add_argument(
@@ -902,10 +902,16 @@ def resolve_source_path(source_path: Path) -> Path:
     )
 
 
-def resolve_target_paths(targets: list[Path]) -> list[Path]:
+def resolve_target_paths(targets: list[Path], allow_fallback_scan: bool = True) -> list[Path]:
     existing = [target for target in targets if target.exists()]
     if existing:
         return _unique_paths(existing)
+
+    if not allow_fallback_scan:
+        raise FileNotFoundError(
+            "Keine der explizit angegebenen --targets-Dateien wurde gefunden. "
+            "Bitte Pfad/Dateiname prüfen."
+        )
 
     candidates: list[Path] = []
     for candidate in DEFAULT_TARGETS_REAL + DEFAULT_TARGETS_FALLBACK:
@@ -2090,8 +2096,11 @@ def main() -> int:
     args = parse_args()
     source_path = resolve_source_path(args.source)
 
-    requested_targets = [Path(p) for p in args.targets]
-    targets = resolve_target_paths(requested_targets)
+    if args.targets:
+        requested_targets = [Path(p) for p in args.targets]
+        targets = resolve_target_paths(requested_targets, allow_fallback_scan=False)
+    else:
+        targets = resolve_target_paths(DEFAULT_TARGETS_REAL, allow_fallback_scan=True)
 
     source_rows = load_source_emails(source_path)
     if not source_rows:
