@@ -530,8 +530,42 @@ class Worker:
         self.wait(2)
 
     def repair_daten_de_ref_formulas(self, workbook) -> dict[str, int]:
-        """Repair broken MATCH references in Daten-like sheets D:E (#REF/#BEZUG)."""
+        """Repair/normalize Measurements lookups in Daten-like sheets (A:X)."""
         repaired_by_sheet: dict[str, int] = {}
+        pattern_en = re.compile(
+            r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),Measurements!\$E\$\d+:\$E\$\d+,0\)\+1\),(\d+)\)",
+            re.IGNORECASE,
+        )
+        pattern_ref = re.compile(
+            r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),\(Measurements\[MeasurementName\]\),0\)\+1\),(\d+)\)",
+            re.IGNORECASE,
+        )
+        pattern_de = re.compile(
+            r"INDEX\(Measurements!\$A\$1:\$X\$\d+;\(VERGLEICH\(C(\d+);Measurements!\$E\$\d+:\$E\$\d+;0\)\+1\);(\d+)\)",
+            re.IGNORECASE,
+        )
+
+        def _normalize_measurement_formula(formula_text: str) -> str:
+            repaired = (
+                formula_text
+                .replace("(#REF!)", "(Measurements[MeasurementName])")
+                .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
+                .replace("#REF!", "Measurements[MeasurementName]")
+                .replace("#BEZUG!", "Measurements[MeasurementName]")
+            )
+            repaired = pattern_en.sub(
+                lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+                repaired,
+            )
+            repaired = pattern_ref.sub(
+                lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+                repaired,
+            )
+            repaired = pattern_de.sub(
+                lambda m: f"INDEX(Measurements!$A:$X;VERGLEICH(C{m.group(1)};Measurements!$E:$E;0);{m.group(2)})",
+                repaired,
+            )
+            return repaired
 
         for sheet_name in ("Daten", "Daten EZE"):
             try:
@@ -550,25 +584,19 @@ class Worker:
 
             repaired = 0
             for row in range(1, last_row + 1):
-                for col in (4, 5):
+                for col in range(1, 25):
                     cell = sheet.Cells(row, col)
                     formula = cell.Formula
                     if formula is None:
                         continue
                     formula_text = str(formula)
                     upper = formula_text.upper()
-                    if "MATCH(" not in upper:
+                    if "MEASUREMENTS" not in upper:
                         continue
-                    if "#REF!" not in upper and "#BEZUG!" not in upper:
+                    if "MATCH(" not in upper and "VERGLEICH(" not in upper:
                         continue
 
-                    repaired_formula = (
-                        formula_text
-                        .replace("(#REF!)", "(Measurements[MeasurementName])")
-                        .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
-                        .replace("#REF!", "Measurements[MeasurementName]")
-                        .replace("#BEZUG!", "Measurements[MeasurementName]")
-                    )
+                    repaired_formula = _normalize_measurement_formula(formula_text)
                     if repaired_formula != formula_text:
                         cell.Formula = repaired_formula
                         repaired += 1
@@ -977,7 +1005,7 @@ class Worker:
                         "excel_formula_repair",
                         itemId=item.get("id"),
                         sheet="Daten,Daten EZE",
-                        columns="D:E",
+                        columns="A:X",
                         repairedCount=repaired_total,
                         repairedBySheet=repaired_counts,
                     )
@@ -986,8 +1014,8 @@ class Worker:
                     "excel_formula_repair_warning",
                     itemId=item.get("id"),
                     sheet="Daten",
-                    columns="D:E",
-                    message=f"Formelreparatur in Daten!D:E fehlgeschlagen: {error}",
+                    columns="A:X",
+                    message=f"Formelreparatur in Daten!A:X fehlgeschlagen: {error}",
                 )
 
             try:

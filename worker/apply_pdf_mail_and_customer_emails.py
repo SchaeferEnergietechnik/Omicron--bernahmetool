@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -1744,8 +1745,45 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
 
 def repair_daten_de_ref_formulas(workbook) -> dict[str, int]:
-    """Repariert defekte MATCH-Bezuege in Daten-Tabellen D:E anhand des V19m-Musters."""
+    """Repariert/normalisiert Measurements-Lookups in Daten-Tabellen (A:X)."""
     fixed_by_sheet: dict[str, int] = {}
+    pattern_en = re.compile(
+        r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),Measurements!\$E\$\d+:\$E\$\d+,0\)\+1\),(\d+)\)",
+        re.IGNORECASE,
+    )
+    pattern_ref = re.compile(
+        r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),\(Measurements\[MeasurementName\]\),0\)\+1\),(\d+)\)",
+        re.IGNORECASE,
+    )
+    pattern_de = re.compile(
+        r"INDEX\(Measurements!\$A\$1:\$X\$\d+;\(VERGLEICH\(C(\d+);Measurements!\$E\$\d+:\$E\$\d+;0\)\+1\);(\d+)\)",
+        re.IGNORECASE,
+    )
+
+    def _normalize_measurement_formula(formula_text: str) -> str:
+        # First heal explicit broken tokens.
+        repaired = (
+            formula_text
+            .replace("(#REF!)", "(Measurements[MeasurementName])")
+            .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
+            .replace("#REF!", "Measurements[MeasurementName]")
+            .replace("#BEZUG!", "Measurements[MeasurementName]")
+        )
+
+        # Then normalize to a row-shift-safe full-column lookup.
+        repaired = pattern_en.sub(
+            lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+            repaired,
+        )
+        repaired = pattern_ref.sub(
+            lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+            repaired,
+        )
+        repaired = pattern_de.sub(
+            lambda m: f"INDEX(Measurements!$A:$X;VERGLEICH(C{m.group(1)};Measurements!$E:$E;0);{m.group(2)})",
+            repaired,
+        )
+        return repaired
 
     for sheet_name in ("Daten", "Daten EZE"):
         try:
@@ -1763,7 +1801,7 @@ def repair_daten_de_ref_formulas(workbook) -> dict[str, int]:
 
         fixed = 0
         for row in range(1, last_row + 1):
-            for col in (4, 5):
+            for col in range(1, 25):
                 cell = ws.Cells(row, col)
                 formula = cell.Formula
                 if formula is None:
@@ -1771,18 +1809,12 @@ def repair_daten_de_ref_formulas(workbook) -> dict[str, int]:
 
                 formula_text = str(formula)
                 upper = formula_text.upper()
-                if "MATCH(" not in upper:
+                if "MEASUREMENTS" not in upper:
                     continue
-                if "#REF!" not in upper and "#BEZUG!" not in upper:
+                if "MATCH(" not in upper and "VERGLEICH(" not in upper:
                     continue
 
-                repaired = (
-                    formula_text
-                    .replace("(#REF!)", "(Measurements[MeasurementName])")
-                    .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
-                    .replace("#REF!", "Measurements[MeasurementName]")
-                    .replace("#BEZUG!", "Measurements[MeasurementName]")
-                )
+                repaired = _normalize_measurement_formula(formula_text)
                 if repaired != formula_text:
                     cell.Formula = repaired
                     fixed += 1
@@ -1981,12 +2013,12 @@ def apply_changes_with_excel_com(
                 f"Original: {error}"
             ) from error
 
-            print(f"{path}: Schritt Daten!D:E-Bezuege reparieren ...")
+            print(f"{path}: Schritt Daten-Formelbezüge (A:X) reparieren ...")
             repaired_daten_refs = _retry_excel_call(lambda: repair_daten_de_ref_formulas(workbook))
             repaired_total = sum(repaired_daten_refs.values())
-            print(f"{path}: Reparierte Formeln in Daten-Tabellen D:E gesamt: {repaired_total}")
+            print(f"{path}: Reparierte Formeln in Daten-Tabellen A:X gesamt: {repaired_total}")
             for sheet_name, count in repaired_daten_refs.items():
-                print(f"{path}:   {sheet_name}!D:E repariert: {count}")
+                print(f"{path}:   {sheet_name}!A:X repariert: {count}")
 
         print(f"{path}: Schritt Debug-Snapshot ...")
         try:
