@@ -688,18 +688,38 @@ def restore_logos_from_reference(excel_app, target_workbook, reference_path: Pat
             ref_workbook.Close(SaveChanges=False)
 
 
-def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, reference_path: Path) -> bool:
+def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, reference_path: Path) -> int:
     ref_workbook = None
     try:
         ref_workbook = excel_app.Workbooks.Open(str(reference_path.resolve()), ReadOnly=True, AddToMru=False)
         ws_src = ref_workbook.Worksheets("Schutzprüf-Checkliste")
         ws_dst = target_workbook.Worksheets("Schutzprüf-Checkliste")
 
-        # xlPasteValidation = 6
-        ws_src.UsedRange.Copy()
-        ws_dst.UsedRange.PasteSpecial(Paste=6)
+        try:
+            ws_dst.Unprotect()
+        except Exception:
+            pass
+
+        transferred_areas = 0
+
+        try:
+            # xlCellTypeAllValidation = -4174
+            validated_cells = ws_src.Cells.SpecialCells(-4174)
+            for i in range(1, int(validated_cells.Areas.Count) + 1):
+                area = validated_cells.Areas(i)
+                address = str(area.Address)
+                area.Copy()
+                # xlPasteValidation = 6
+                ws_dst.Range(address).PasteSpecial(Paste=6)
+                transferred_areas += 1
+        except Exception:
+            # Fallback for workbooks where SpecialCells is unavailable/unreliable.
+            ws_src.UsedRange.Copy()
+            ws_dst.UsedRange.PasteSpecial(Paste=6)
+            transferred_areas = 1
+
         excel_app.CutCopyMode = False
-        return True
+        return transferred_areas
     finally:
         try:
             excel_app.CutCopyMode = False
@@ -1178,11 +1198,11 @@ def apply_changes_with_excel_com(
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
-        restored_dropdowns = False
+        restored_dropdown_areas = 0
         rebound_datum_buttons = 0
         if reference_logo_path is not None:
             print(f"{path}: Schritt Drop-downs aus V19 wiederherstellen ...")
-            restored_dropdowns = _retry_excel_call(
+            restored_dropdown_areas = _retry_excel_call(
                 lambda: restore_checkliste_dropdowns_from_reference(excel, workbook, reference_logo_path)
             )
 
@@ -1190,7 +1210,7 @@ def apply_changes_with_excel_com(
                 lambda: restore_logos_from_reference(excel, workbook, reference_logo_path)
             )
             print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
-            print(f"{path}: Drop-downs in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdowns}")
+            print(f"{path}: Drop-down-Bereiche in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdown_areas}")
         else:
             print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
 
