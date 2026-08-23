@@ -1642,47 +1642,53 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
         print(f"Hinweis: CF-Regel fuer A3 konnte nicht gesetzt/geprueft werden: {error}")
 
 
-def repair_daten_de_ref_formulas(workbook) -> int:
-    """Repariert defekte MATCH-Bezuege in Daten!D:E anhand des V19m-Musters."""
-    try:
-        ws = workbook.Worksheets("Daten")
-    except Exception:
-        return 0
+def repair_daten_de_ref_formulas(workbook) -> dict[str, int]:
+    """Repariert defekte MATCH-Bezuege in Daten-Tabellen D:E anhand des V19m-Musters."""
+    fixed_by_sheet: dict[str, int] = {}
 
-    try:
-        last_row_c = int(ws.Cells(ws.Rows.Count, 3).End(-4162).Row)  # xlUp
-        last_row_d = int(ws.Cells(ws.Rows.Count, 4).End(-4162).Row)  # xlUp
-        last_row_e = int(ws.Cells(ws.Rows.Count, 5).End(-4162).Row)  # xlUp
-        last_row = max(last_row_c, last_row_d, last_row_e)
-    except Exception:
-        return 0
+    for sheet_name in ("Daten", "Daten EZE"):
+        try:
+            ws = workbook.Worksheets(sheet_name)
+        except Exception:
+            continue
 
-    fixed = 0
-    for row in range(1, last_row + 1):
-        for col in (4, 5):
-            cell = ws.Cells(row, col)
-            formula = cell.Formula
-            if formula is None:
-                continue
+        try:
+            last_row_c = int(ws.Cells(ws.Rows.Count, 3).End(-4162).Row)  # xlUp
+            last_row_d = int(ws.Cells(ws.Rows.Count, 4).End(-4162).Row)  # xlUp
+            last_row_e = int(ws.Cells(ws.Rows.Count, 5).End(-4162).Row)  # xlUp
+            last_row = max(last_row_c, last_row_d, last_row_e)
+        except Exception:
+            continue
 
-            formula_text = str(formula)
-            if "MATCH(" not in formula_text.upper():
-                continue
-            if "#REF!" not in formula_text.upper() and "#BEZUG!" not in formula_text.upper():
-                continue
+        fixed = 0
+        for row in range(1, last_row + 1):
+            for col in (4, 5):
+                cell = ws.Cells(row, col)
+                formula = cell.Formula
+                if formula is None:
+                    continue
 
-            repaired = (
-                formula_text
-                .replace("(#REF!)", "(Measurements[MeasurementName])")
-                .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
-                .replace("#REF!", "Measurements[MeasurementName]")
-                .replace("#BEZUG!", "Measurements[MeasurementName]")
-            )
-            if repaired != formula_text:
-                cell.Formula = repaired
-                fixed += 1
+                formula_text = str(formula)
+                upper = formula_text.upper()
+                if "MATCH(" not in upper:
+                    continue
+                if "#REF!" not in upper and "#BEZUG!" not in upper:
+                    continue
 
-    return fixed
+                repaired = (
+                    formula_text
+                    .replace("(#REF!)", "(Measurements[MeasurementName])")
+                    .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
+                    .replace("#REF!", "Measurements[MeasurementName]")
+                    .replace("#BEZUG!", "Measurements[MeasurementName]")
+                )
+                if repaired != formula_text:
+                    cell.Formula = repaired
+                    fixed += 1
+
+        fixed_by_sheet[sheet_name] = fixed
+
+    return fixed_by_sheet
 
 
 def get_abschlussbemerkungen_debug_snapshot(workbook) -> dict[str, str]:
@@ -1842,7 +1848,10 @@ def apply_changes_with_excel_com(
 
             print(f"{path}: Schritt Daten!D:E-Bezuege reparieren ...")
             repaired_daten_refs = _retry_excel_call(lambda: repair_daten_de_ref_formulas(workbook))
-            print(f"{path}: Reparierte Formeln in Daten!D:E: {repaired_daten_refs}")
+            repaired_total = sum(repaired_daten_refs.values())
+            print(f"{path}: Reparierte Formeln in Daten-Tabellen D:E gesamt: {repaired_total}")
+            for sheet_name, count in repaired_daten_refs.items():
+                print(f"{path}:   {sheet_name}!D:E repariert: {count}")
 
         print(f"{path}: Schritt Debug-Snapshot ...")
         try:
