@@ -839,6 +839,49 @@ def _retry_excel_call(callable_fn, attempts: int = 20, wait_seconds: float = 0.3
             time.sleep(wait_seconds)
 
 
+def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
+    ws_angaben = workbook.Worksheets("Allgemeine Angaben")
+    ws_protokoll = workbook.Worksheets("Prüfprotokoll")
+
+    # Map "!" from checklist-linked fields to "NICHT OK" so existing warning semantics apply.
+    formula_updates = {
+        "C105": "=IF('Schutzprüf-Checkliste'!J70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J70=\"!\",\"NICHT OK\",\"\"))",
+        "C106": "=IF('Schutzprüf-Checkliste'!L70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L70=\"!\",\"NICHT OK\",\"\"))",
+        "C107": "=IF('Schutzprüf-Checkliste'!J71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J71=\"!\",\"NICHT OK\",\"\"))",
+        "C108": "=IF('Schutzprüf-Checkliste'!L71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L71=\"!\",\"NICHT OK\",\"\"))",
+        "C114": "=IF('Schutzprüf-Checkliste'!J72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J72=\"!\",\"NICHT OK\",\"\"))",
+        "C115": "=IF('Schutzprüf-Checkliste'!L72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L72=\"!\",\"NICHT OK\",\"\"))",
+        "C109": "=IF('Schutzprüf-Checkliste'!E74=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E74=\"!\",\"NICHT OK\",\"\"))",
+    }
+    for cell, formula in formula_updates.items():
+        ws_angaben.Range(cell).Formula = formula
+
+    # Existing red rule covers J168:J175. Add same semantic rule for J182 (linked to row 74).
+    target_cell = ws_protokoll.Range("J182")
+    has_nicht_ok_rule = False
+    for i in range(1, int(target_cell.FormatConditions.Count) + 1):
+        rule = target_cell.FormatConditions(i)
+        try:
+            if int(rule.Type) == 1 and int(rule.Operator) == 3:
+                formula = str(rule.Formula1).replace("=", "").replace('"', "").strip().upper()
+                if formula == "NICHT OK":
+                    has_nicht_ok_rule = True
+                    break
+        except Exception:
+            continue
+
+    if not has_nicht_ok_rule:
+        added_rule = target_cell.FormatConditions.Add(Type=1, Operator=3, Formula1='="NICHT OK"')
+        try:
+            ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
+            added_rule.Font.Color = ref_rule.Font.Color
+            added_rule.Interior.Color = ref_rule.Interior.Color
+            added_rule.StopIfTrue = ref_rule.StopIfTrue
+        except Exception:
+            # Style copy is best effort; semantic condition is the functional requirement.
+            pass
+
+
 def patch_pdf_form_vba(path: Path, visible: bool) -> None:
     try:
         import pythoncom
@@ -957,6 +1000,7 @@ def apply_changes_with_excel_com(
             workbook = _open_workbook(excel, str(temp_workbook_path))
 
         updated, missing = _retry_excel_call(lambda: update_customer_sheet_excel_com(workbook, source_rows))
+        _retry_excel_call(lambda: apply_abschlussbemerkungen_nicht_ok_logic(workbook))
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
