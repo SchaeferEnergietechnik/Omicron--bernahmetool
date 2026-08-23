@@ -12,6 +12,15 @@ DEFAULT_TARGETS_REAL = [
     Path("samples/topics/excel-basis/V20a_Übergeordneter_Entkupplungsschutz.xlsm"),
 ]
 
+DEFAULT_TARGETS_FALLBACK = [
+    Path("samples/V19m_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20a_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V19m_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20a_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V19m_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("V20a_Uebergeordneter_Entkupplungsschutz.xlsm"),
+]
+
 DEFAULT_SOURCE = Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx")
 CUSTOMER_SHEET = "Kunden"
 SOURCE_CANDIDATE_SHEETS = ("Kundenadressen", "Kunden")
@@ -456,6 +465,78 @@ def ensure_exists(path: Path) -> None:
         raise FileNotFoundError(f"Datei nicht gefunden: {path}")
 
 
+def _unique_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    result: list[Path] = []
+    for path in paths:
+        key = str(path).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return result
+
+
+def resolve_source_path(source_path: Path) -> Path:
+    if source_path.exists():
+        return source_path
+
+    fallback_candidates: list[Path] = [
+        Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx"),
+        Path("samples/Muster_Termine 17.08.2026.xlsx"),
+        Path("Muster_Termine 17.08.2026.xlsx"),
+    ]
+    for candidate in fallback_candidates:
+        if candidate.exists():
+            return candidate
+
+    recursive_hits = sorted(Path(".").glob("**/Muster_Termine*.xlsx"))
+    if recursive_hits:
+        return recursive_hits[0]
+
+    termine_hits = sorted(Path(".").glob("**/Termine*.xlsx"))
+    if termine_hits:
+        return termine_hits[0]
+
+    raise FileNotFoundError(
+        f"Datei nicht gefunden: {source_path}. "
+        "Bitte --source explizit angeben."
+    )
+
+
+def resolve_target_paths(targets: list[Path]) -> list[Path]:
+    existing = [target for target in targets if target.exists()]
+    if existing:
+        return _unique_paths(existing)
+
+    candidates: list[Path] = []
+    for candidate in DEFAULT_TARGETS_REAL + DEFAULT_TARGETS_FALLBACK:
+        if candidate.exists():
+            candidates.append(candidate)
+
+    if candidates:
+        return _unique_paths(candidates)
+
+    recursive_hits: list[Path] = []
+    for pattern in [
+        "**/*Übergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*Uebergeordneter_Entkupplungsschutz*.xlsm",
+    ]:
+        recursive_hits.extend(sorted(Path(".").glob(pattern)))
+
+    filtered = [
+        path
+        for path in recursive_hits
+        if "bak" not in path.name.lower() and not path.name.startswith("~$")
+    ]
+    if filtered:
+        return _unique_paths(filtered)
+
+    raise FileNotFoundError(
+        "Keine passende Ziel-XLSM gefunden. Bitte mit --targets eine oder mehrere .xlsm-Dateien angeben."
+    )
+
+
 def backup_file(path: Path, suffix: str) -> Path:
     backup_path = path.with_name(f"{path.stem}{suffix}{path.suffix}")
     shutil.copy2(path, backup_path)
@@ -614,18 +695,20 @@ def patch_pdf_form_vba(path: Path, visible: bool) -> None:
 
 def main() -> int:
     args = parse_args()
-    ensure_exists(args.source)
+    source_path = resolve_source_path(args.source)
 
-    targets = [Path(p) for p in args.targets]
-    for target in targets:
-        ensure_exists(target)
+    requested_targets = [Path(p) for p in args.targets]
+    targets = resolve_target_paths(requested_targets)
 
-    source_rows = load_source_emails(args.source)
+    source_rows = load_source_emails(source_path)
     if not source_rows:
         raise RuntimeError("Keine nutzbaren Kunde->E-Mail-Daten in der Quelle gefunden.")
 
-    print(f"Quelle geladen: {args.source}")
+    print(f"Quelle geladen: {source_path}")
     print(f"Nutzbare E-Mail-Zuordnungen: {len(source_rows)}")
+    print("Ziel-Dateien:")
+    for target in targets:
+        print(f"- {target}")
 
     for target in targets:
         backup_path = backup_file(target, args.backup_suffix)
