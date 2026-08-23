@@ -1015,6 +1015,7 @@ def apply_changes_with_excel_com(
     temp_dir: str | None = None
     temp_workbook_path: Path | None = None
     original_path = path.resolve()
+    debug_snapshot: dict[str, str] = {}
 
     def _open_workbook(excel_app, workbook_path_str: str):
         last_error: Exception | None = None
@@ -1075,9 +1076,25 @@ def apply_changes_with_excel_com(
             shutil.copy2(original_path, temp_workbook_path)
             workbook = _open_workbook(excel, str(temp_workbook_path))
 
+        print(f"{path}: Schritt Kundenblatt aktualisieren ...")
         updated, missing = _retry_excel_call(lambda: update_customer_sheet_excel_com(workbook, source_rows))
-        _retry_excel_call(lambda: apply_abschlussbemerkungen_nicht_ok_logic(workbook))
-        debug_snapshot = _retry_excel_call(lambda: get_abschlussbemerkungen_debug_snapshot(workbook))
+
+        print(f"{path}: Schritt Abschlussbemerkungen/NICHT-OK-Logik ...")
+        try:
+            _retry_excel_call(lambda: apply_abschlussbemerkungen_nicht_ok_logic(workbook))
+        except Exception as error:
+            raise RuntimeError(
+                "Fehler in Schritt 'Abschlussbemerkungen/NICHT-OK-Logik'. "
+                f"Original: {error}"
+            ) from error
+
+        print(f"{path}: Schritt Debug-Snapshot ...")
+        try:
+            debug_snapshot = _retry_excel_call(lambda: get_abschlussbemerkungen_debug_snapshot(workbook))
+        except Exception as error:
+            # Snapshot is diagnostic only and must not abort processing.
+            debug_snapshot = {}
+            print(f"{path}: Hinweis: Debug-Snapshot konnte nicht gelesen werden: {error}")
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
@@ -1103,8 +1120,9 @@ def apply_changes_with_excel_com(
             shutil.copy2(temp_workbook_path, original_path)
 
         print(f"{path}: Abschlussbemerkungen-Formeln aktualisiert")
-        for key, value in debug_snapshot.items():
-            print(f"{path}: {key} -> {value}")
+        if debug_snapshot:
+            for key, value in debug_snapshot.items():
+                print(f"{path}: {key} -> {value}")
 
         return updated, missing
     finally:
