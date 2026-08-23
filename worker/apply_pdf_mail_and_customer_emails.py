@@ -856,6 +856,19 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
     for cell, formula in formula_updates.items():
         ws_angaben.Range(cell).Formula = formula
 
+    # Ensure description rows in Abschlussbemerkungen are also shown for "!".
+    protokoll_formula_updates = {
+        "A169": "=IF(OR('Schutzprüf-Checkliste'!J70=TRUE,'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!J70=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
+        "A170": "=IF(OR('Schutzprüf-Checkliste'!L70=TRUE,'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!L70=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
+        "A171": "=IF(OR('Schutzprüf-Checkliste'!J71=TRUE,'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!J71=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A172": "=IF(OR('Schutzprüf-Checkliste'!L71=TRUE,'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!L71=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A173": "=IF(OR('Schutzprüf-Checkliste'!J72=TRUE,'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!J72=\"!\"),'Allgemeine Angaben'!A114,\"\")",
+        "A174": "=IF(OR('Schutzprüf-Checkliste'!L72=TRUE,'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!L72=\"!\"),'Allgemeine Angaben'!A115,\"\")",
+        "A182": "=IF(OR('Schutzprüf-Checkliste'!E74=\"x\",'Schutzprüf-Checkliste'!E74=\"!\"),\"DC USV für übergeordneter Schutz/ggfs. UMZ-Schutz in Ordnung\",\"\")",
+    }
+    for cell, formula in protokoll_formula_updates.items():
+        ws_protokoll.Range(cell).Formula = formula
+
     # Existing red rule covers J168:J175. Add same semantic rule for J182 (linked to row 74).
     target_cell = ws_protokoll.Range("J182")
     has_nicht_ok_rule = False
@@ -880,6 +893,40 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
         except Exception:
             # Style copy is best effort; semantic condition is the functional requirement.
             pass
+
+    # Show station lock message in row 3 when any lower status is NICHT OK.
+    lock_message = "Station gesperrt - Nicht alle Schutzfunktionen in Ordnung"
+    lock_formula = (
+        "=IF(OR(COUNTIF($J$167:$J$175,\"NICHT OK\")>0,$J$182=\"NICHT OK\"),"
+        f"\"{lock_message}\""
+        ",\"Prüfer\")"
+    )
+    ws_protokoll.Range("A3").Formula = lock_formula
+
+    lock_cf_formula = '=OR(COUNTIF($J$167:$J$175,"NICHT OK")>0,$J$182="NICHT OK")'
+    a3_cell = ws_protokoll.Range("A3")
+    has_lock_cf_rule = False
+    for i in range(1, int(a3_cell.FormatConditions.Count) + 1):
+        rule = a3_cell.FormatConditions(i)
+        try:
+            if int(rule.Type) == 2:
+                if str(rule.Formula1).replace(" ", "") == lock_cf_formula.replace(" ", ""):
+                    has_lock_cf_rule = True
+                    break
+        except Exception:
+            continue
+
+    if not has_lock_cf_rule:
+        lock_rule = a3_cell.FormatConditions.Add(Type=2, Formula1=lock_cf_formula)
+        try:
+            ref_rule = ws_protokoll.Range("J168").FormatConditions(1)
+            lock_rule.Font.Color = ref_rule.Font.Color
+            lock_rule.Interior.Color = ref_rule.Interior.Color
+            lock_rule.StopIfTrue = ref_rule.StopIfTrue
+        except Exception:
+            # Style copy is best effort; enforce red background if no reference style is available.
+            lock_rule.Interior.Color = 255
+            lock_rule.Font.Color = 16777215
 
 
 def patch_pdf_form_vba(path: Path, visible: bool) -> None:
