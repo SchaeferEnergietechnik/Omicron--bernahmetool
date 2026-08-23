@@ -25,7 +25,7 @@ DEFAULT_SOURCE = Path("samples/topics/excel-basis/Muster_Termine 17.08.2026.xlsx
 CUSTOMER_SHEET = "Kunden"
 SOURCE_CANDIDATE_SHEETS = ("Kundenadressen", "Kunden")
 
-FORM_CODE = r'''Attribute VB_Name = "frmPDFDruck"
+FORM_CODE = r'''Option Explicit
 Private Const EMAIL_CHECKBOX_NAME As String = "chkDirektEmail"
 
 Private Sub UserForm_Initialize()
