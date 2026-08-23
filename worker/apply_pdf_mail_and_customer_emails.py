@@ -6,6 +6,8 @@ import shutil
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -893,6 +895,89 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             ref_workbook.Close(SaveChanges=False)
 
 
+def _extract_x14_dropdown_validations(workbook_path: Path, sheet_name: str) -> list[tuple[str, str]]:
+    ns_main = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ns_rel = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    ns_x14 = "{http://schemas.microsoft.com/office/spreadsheetml/2009/9/main}"
+    ns_xm = "{http://schemas.microsoft.com/office/excel/2006/main}"
+
+    results: list[tuple[str, str]] = []
+    with ZipFile(workbook_path) as z:
+        wb = ET.fromstring(z.read("xl/workbook.xml"))
+        rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
+
+        rid_to_target: dict[str, str] = {}
+        for rel in rels:
+            if rel.tag.endswith("Relationship"):
+                rid_to_target[rel.attrib.get("Id", "")] = rel.attrib.get("Target", "")
+
+        sheet_xml_path = ""
+        for s in wb.findall(f".//{ns_main}sheet"):
+            if s.attrib.get("name") != sheet_name:
+                continue
+            rid = s.attrib.get(f"{ns_rel}id", "")
+            target = rid_to_target.get(rid, "")
+            if target:
+                sheet_xml_path = "xl/" + target
+            break
+
+        if not sheet_xml_path:
+            return results
+
+        root = ET.fromstring(z.read(sheet_xml_path))
+        for dv in root.findall(f".//{ns_x14}dataValidation"):
+            dv_type = dv.attrib.get("type", "")
+            if dv_type != "list":
+                continue
+
+            formula_node = dv.find(f"{ns_x14}formula1/{ns_xm}f")
+            sqref_node = dv.find(f"{ns_xm}sqref")
+            formula = "" if formula_node is None else (formula_node.text or "")
+            sqref = "" if sqref_node is None else (sqref_node.text or "")
+            if formula and sqref:
+                results.append((sqref.strip(), formula.strip()))
+
+    return results
+
+
+def restore_x14_dropdowns_from_reference(target_workbook, reference_path: Path) -> int:
+    rules = _extract_x14_dropdown_validations(reference_path, "Schutzprüf-Checkliste")
+    if not rules:
+        return 0
+
+    ws = target_workbook.Worksheets("Schutzprüf-Checkliste")
+    try:
+        ws.Unprotect()
+    except Exception:
+        pass
+
+    restored = 0
+    for sqref, formula in rules:
+        try:
+            # COM range union syntax uses commas instead of spaces.
+            target_ref = sqref.replace(" ", ",")
+            rng = ws.Range(target_ref)
+            try:
+                rng.Validation.Delete()
+            except Exception:
+                pass
+
+            if not formula.startswith("="):
+                formula = "=" + formula
+
+            # xlValidateList = 3, xlValidAlertStop = 1
+            rng.Validation.Add(Type=3, AlertStyle=1, Formula1=formula)
+            rng.Validation.IgnoreBlank = True
+            rng.Validation.InCellDropdown = True
+            rng.Validation.ShowInput = True
+            rng.Validation.ShowError = True
+            restored += 1
+        except Exception:
+            continue
+
+    return restored
+
+
 def ensure_checkliste_e_column_dropdown_fallback(workbook) -> int:
     ws = workbook.Worksheets("Schutzprüf-Checkliste")
     try:
@@ -1404,12 +1489,16 @@ def apply_changes_with_excel_com(
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
         restored_dropdown_areas = 0
+        restored_x14_dropdowns = 0
         added_dropdown_fallback_cells = 0
         rebound_datum_buttons = 0
         if reference_logo_path is not None:
             print(f"{path}: Schritt Drop-downs aus V19 wiederherstellen ...")
             restored_dropdown_areas = _retry_excel_call(
                 lambda: restore_checkliste_dropdowns_from_reference(excel, workbook, reference_logo_path)
+            )
+            restored_x14_dropdowns = _retry_excel_call(
+                lambda: restore_x14_dropdowns_from_reference(workbook, reference_logo_path)
             )
             added_dropdown_fallback_cells = _retry_excel_call(
                 lambda: ensure_checkliste_e_column_dropdown_fallback(workbook)
@@ -1420,6 +1509,7 @@ def apply_changes_with_excel_com(
             )
             print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
             print(f"{path}: Drop-down-Bereiche in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdown_areas}")
+            print(f"{path}: x14-Drop-down-Regeln wiederhergestellt: {restored_x14_dropdowns}")
             print(f"{path}: Drop-down-Fallback E3:E400 ergänzt (Zellen): {added_dropdown_fallback_cells}")
         else:
             print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
