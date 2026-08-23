@@ -62,4 +62,14 @@
 
 ## Nächster konkreter Schritt
 
-Terminexcel-Kundenzuordnung in den Worker integrieren, danach die Erfolgsablage nach `Protokollentwürfe` einschließlich Konfliktbehandlung implementieren und mit einem echten Windows-End-to-End-Nachtlauf validieren.
+Aktuell pausiert. Der Arbeitsstand ist fuer den Moment eingefroren.
+
+Operativer Standard:
+
+- Basisdatei fuer neue Aenderungen: `V20g_Schutzprüfprotokoll-Checkliste.xlsm`
+- Worker-Default-Ziel: V20g
+- Drop-down-Restauration: nur explizit per `--restore-dropdowns`
+
+Wiederaufnahme:
+
+- Weitere Arbeiten nur noch als einzelne, fachlich konkrete Change-Requests.

@@ -121,6 +121,23 @@ Ordner, deren Name mit `zz_` beginnt, werden bei der rekursiven Suche vollständ
 
 Ziel ist eine kürzere Suchlaufzeit in bekannten Archivbereichen.
 
+### D-017: V20g als aktueller Vorlagenstandard
+
+**Status:** entschieden
+
+Die Datei `V20g_Schutzprüfprotokoll-Checkliste.xlsm` ist der aktuelle Arbeitsstandard fuer weitere fachliche Aenderungen. Neue Anpassungen orientieren sich an diesem Stand; fruehere V20a/V20e/V20f-Zwischenstaende gelten nur noch als Historie.
+
+### D-018: Drop-down-Restauration nur noch explizit
+
+**Status:** entschieden
+
+Die automatische Wiederherstellung von Drop-down-Validierungen wird nicht mehr standardmaessig ausgefuehrt. Sie kann bei Bedarf explizit mit `--restore-dropdowns` aktiviert werden.
+
+Begruendung:
+
+- Verhindert unbeabsichtigtes Ueberschreiben manuell gepflegter Vorlageninhalte.
+- Erhoeht Vorhersagbarkeit fuer kuenftige, gezielte Fach-Changes.
+
 ## Offene Entscheidungen
 
 ### O-001: Zuordnung OCC zu Excel

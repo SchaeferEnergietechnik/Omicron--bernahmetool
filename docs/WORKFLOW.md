@@ -98,6 +98,12 @@ Zusätzlich gilt:
 
 ## 6. Verarbeitung
 
+Aktueller Vorlagen-Standard (23.08.2026):
+
+- Der Worker zielt standardmaessig auf `V20g_Schutzprüfprotokoll-Checkliste.xlsm`.
+- Die automatische Drop-down-Restauration ist standardmaessig deaktiviert.
+- Falls Drop-downs aus einer Referenz explizit wiederhergestellt werden sollen, ist der Lauf mit `--restore-dropdowns` zu starten.
+
 Die Einträge werden nacheinander verarbeitet. Für jeden Eintrag:
 
 1. Quelldatei und Ziel erneut auf Existenz und Zugriff prüfen.

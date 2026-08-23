@@ -89,6 +89,12 @@ Noch zu klären:
 - Notwendigkeit einer Sicherungskopie,
 - Verhalten bei geöffneter oder gesperrter Datei.
 
+Aktueller Betriebsstand (23.08.2026):
+
+- Standard-Zieldatei fuer den Worker: `V20g_Schutzprüfprotokoll-Checkliste.xlsm`
+- Drop-down-Validierungen werden standardmaessig nicht automatisch restauriert.
+- Optionale Wiederherstellung ist explizit per Laufparameter `--restore-dropdowns` moeglich.
+
 ## Zuordnungsmodell
 
 Eine Verarbeitungseinheit besteht mindestens aus:

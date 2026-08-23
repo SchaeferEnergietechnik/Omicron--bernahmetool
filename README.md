@@ -19,11 +19,18 @@ Die ausführliche Beschreibung liegt unter:
 - [Analyse der Terminexcel](docs/TERMINEXCEL_ANALYSIS.md)
 - [VBA-Anpassung für V19m](docs/V19M_VBA_MIGRATION.md)
 - [Release 2026-08-22](docs/RELEASE_2026-08-22.md)
+- [Release 2026-08-23](docs/RELEASE_2026-08-23.md)
 - [Windows Release Checklist](docs/WINDOWS_RELEASE_CHECKLIST.md)
 
 ## Aktueller Stand
 
 Die produktive Desktop-Basis ist umgesetzt: Electron-Oberfläche, nativer Cloud-Import, Python-Worker, manuelle OCC-zu-Excel-Zuordnung, Schrittanzeige und robuster Nachtlauf mit Fehlerbericht sind vorhanden. Die Terminexcel-Kundenauflösung ist integriert (Teilwortabgleich mit Stopwort-Filter). Wenn keine eindeutige Kundenzuordnung gelingt oder Makros fehlschlagen, wird der Lauf fortgesetzt und die Excel dennoch gespeichert. Optional kann der Rechner nach Laufende automatisch heruntergefahren werden (standardmäßig deaktiviert). Offen sind vor allem die automatische Erfolgsablage nach `Protokollentwürfe`, der Wiederanlauf fehlgeschlagener Einträge und die atomare Excel-Sicherung. Der detaillierte Übergabestand steht unter [Aktueller Projektstand und Wiederaufnahme](docs/CURRENT_STATUS.md).
+
+Zusatzstand 23.08.2026:
+
+- Aktuelle Arbeitsvorlage ist `V20g_Schutzprüfprotokoll-Checkliste.xlsm`.
+- Drop-down-Restauration im Worker ist standardmaessig deaktiviert und nur bei Bedarf per `--restore-dropdowns` aktivierbar.
+- Das Projekt ist fuer den Moment fachlich pausiert; weitere Anpassungen erfolgen nur noch als konkrete Change-Requests.
 
 ## Windows-Desktopversion
 

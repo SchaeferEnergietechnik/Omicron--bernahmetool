@@ -1,8 +1,25 @@
 # Projektstand
 
-**Stand:** 22. August 2026  
-**Status:** Electron-Desktop-GUI, nativer Cloud-Import, Python-Worker mit robuster Excel-Verarbeitung, manuelle OCC-zu-Excel-Zuordnung, sichtbare Schrittanzeige und optionales Herunterfahren nach Laufende sind lauffähig.  
-**Letzter Commit:** `48d0812` – Always save Excel even when customer lookup or macros fail
+**Stand:** 23. August 2026  
+**Status:** Excel-Worker-Fokus abgeschlossen fuer den Moment. V20g ist neuer Standardstand, die Abschlussbemerkungs-Logik (NICHT OK/Einblendung), A3-Sperrhinweis und robustere Datum-Makro-Anbindung sind umgesetzt.  
+**Letzter Commit:** `6c1d611` – Set V20g as default target and disable dropdown restore by default
+
+## Kurzfazit (23.08.2026)
+
+- Neuer Zielstandard fuer den Worker: `samples/topics/excel-basis/V20g_Schutzprüfprotokoll-Checkliste.xlsm`.
+- Drop-down-Restauration ist **standardmaessig deaktiviert**, um bestehende Inhalte in neuen Vorlagen nicht unbeabsichtigt zu ueberschreiben.
+- Falls erforderlich, kann die Drop-down-Restauration explizit per `--restore-dropdowns` aktiviert werden.
+- Logik fuer Abschlussbemerkungen angepasst:
+  - `!` fuehrt zu `NICHT OK` in relevanten Feldern.
+  - Einblendung der zugehoerigen Abschlussbemerkungszeilen ist an die MS/NS-Haken gekoppelt.
+  - A3 (`Prüfer`/`Station gesperrt ...`) wird inhaltlich gesetzt; rote Formatierung ist als Regel implementiert.
+- Datumsmakro wurde robuster gemacht (`AktuellesDatum`/`Datum`) und als zusaetzliches Modul hinterlegt.
+
+## Sicherung und Dokumentation (23.08.2026)
+
+- Abschlussbemerkungs- und NICHT-OK-Serie: `23e7f6d`, `860c1ce`, `4d39f86`, `b7fd62e`, `3361117`, `284717d`, `fda8da1`
+- Drop-down- und Datumsmakro-Serie: `e80e54d`, `a2c1422`, `386164b`, `d8f77e4`, `39e4b4b`, `2a57713`, `2930b65`, `a744e95`
+- Aktueller Standard/Freeze fuer weitere Fachaenderungen: `6c1d611`
 
 ## Sicherung und Dokumentation (22.08.2026)
 
@@ -147,21 +164,12 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 
 ## Nächste Entwicklungsschritte
 
-1. **V19m-VBA manuell ergänzen** (Vorbedingung für Tests) – unter Windows an einer Sicherungskopie durchführen:
-   - `legacy/vba/V19m_Modul1_Ergaenzung.bas` öffnen
-   - V19m in Excel öffnen → `Alt+F11` → VBA-Editor
-   - Leeres `Modul1` markieren und Inhalt einfügen oder BAS-Datei importieren
-   - Makros testen: `Modul1.BereicheEinOderAusblenden_Start`, `Tabelle1.Protokollnummer_generieren_unsichtbar`, `Tabelle7.ZeilenAusblendenWennLeer`
+Aktuell pausiert. Es sind vorerst keine weiteren generischen Umbauten geplant.
+Naechste Arbeiten erfolgen nur noch als konkrete Fach-Change-Requests auf Basis der V20g-Vorlage.
 
-2. **Terminexcel-Kundenauflösung in Worker integrieren** – Kundennamen aus Terminexcel zuordnen
-
-3. **Erfolgsablage nach `Protokollentwürfe`** – erfolgreiche Fundordner automatisch verschieben
-
-4. **End-to-End-Test unter Windows** – mit Kopien der Beispieldateien und echtem Omicron
-
-5. **Wiederanlauf fehlgeschlagener Einträge** – neue Jobs aus Skip-Liste generieren
-
-6. **Atomare Excel-Sicherung** – Backup vor Makro-Ausführung, Wiederherstellung bei Fehler
+1. Optional: Logausgaben per Flag verschlanken (`--verbose`/`--quiet`), damit Standardlaeufe kuerzer werden.
+2. Optional: Exakte Formatregeln aus Vorlage explizit kopieren (falls weitere visuelle Abweichungen auftreten).
+3. Neue Anforderungen nur noch gezielt und einzeln umsetzen, danach sofortiger Regressionstest auf der aktuellen Standarddatei.
 
 ## Validierungsstand
 
