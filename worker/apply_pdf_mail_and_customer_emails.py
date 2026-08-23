@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -746,6 +748,45 @@ def apply_changes_with_excel_com(
     pythoncom.CoInitialize()
     excel = None
     workbook = None
+    temp_dir: str | None = None
+    temp_workbook_path: Path | None = None
+    original_path = path.resolve()
+
+    def _open_workbook(excel_app, workbook_path_str: str):
+        last_error: Exception | None = None
+        # Try normal open first.
+        open_variants = [
+            {},
+            {
+                "UpdateLinks": 0,
+                "ReadOnly": False,
+                "IgnoreReadOnlyRecommended": True,
+                "AddToMru": False,
+                "Local": True,
+            },
+            {
+                "UpdateLinks": 0,
+                "ReadOnly": False,
+                "IgnoreReadOnlyRecommended": True,
+                "AddToMru": False,
+                "Local": True,
+                # 1 = xlRepairFile
+                "CorruptLoad": 1,
+            },
+        ]
+
+        for kwargs in open_variants:
+            try:
+                if kwargs:
+                    return excel_app.Workbooks.Open(workbook_path_str, **kwargs)
+                return excel_app.Workbooks.Open(workbook_path_str)
+            except Exception as error:
+                last_error = error
+                continue
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Unbekannter Fehler beim Oeffnen der Excel-Datei.")
 
     try:
         excel = win32com.client.DispatchEx("Excel.Application")
@@ -753,7 +794,7 @@ def apply_changes_with_excel_com(
         excel.DisplayAlerts = False
         excel.AskToUpdateLinks = False
 
-        workbook_path = str(path.resolve())
+        workbook_path = str(original_path)
         try:
             short_path = win32api.GetShortPathName(workbook_path)
             if short_path:
@@ -761,7 +802,14 @@ def apply_changes_with_excel_com(
         except Exception:
             pass
 
-        workbook = excel.Workbooks.Open(workbook_path)
+        try:
+            workbook = _open_workbook(excel, workbook_path)
+        except Exception:
+            # Fallback: copy to temp path with ASCII-only filename and retry there.
+            temp_dir = tempfile.mkdtemp(prefix="ges_excel_open_")
+            temp_workbook_path = Path(temp_dir) / "workbook.xlsm"
+            shutil.copy2(original_path, temp_workbook_path)
+            workbook = _open_workbook(excel, str(temp_workbook_path))
 
         updated, missing = update_customer_sheet_excel_com(workbook, source_rows)
 
@@ -774,6 +822,10 @@ def apply_changes_with_excel_com(
         workbook.Save()
         workbook.Close(SaveChanges=True)
         workbook = None
+
+        if temp_workbook_path is not None:
+            shutil.copy2(temp_workbook_path, original_path)
+
         return updated, missing
     finally:
         if workbook is not None:
@@ -781,6 +833,8 @@ def apply_changes_with_excel_com(
         if excel is not None:
             excel.Quit()
         pythoncom.CoUninitialize()
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def main() -> int:
