@@ -184,7 +184,7 @@ Private Sub SendePdfsPerOutlook(ByVal exportiertePdfs As Collection)
     If projektname = "" Then
         projektname = Trim$(CStr(wsAngaben.Range("C5").Value))
     End If
-    betreff = "Pruefprotokolle" & IIf(projektname <> "", " - " & projektname, "")
+    betreff = "Prüfprotokolle" & IIf(projektname <> "", " - " & projektname, "")
     bodyText = ErzeugeStandardMailtext(kundeText, bemerkungen)
     logoPath = FindeLogoPfad(wb.Path)
     htmlBody = ErzeugeHtmlMailtext(kundeText, bemerkungen, logoPath)
@@ -231,23 +231,23 @@ Private Function ErzeugeStandardMailtext(ByVal kundeText As String, ByVal bemerk
     Dim text As String
 
     text = "Sehr geehrte Damen und Herren," & vbCrLf & vbCrLf & _
-        "anbei erhalten Sie die aktuellen Pruefprotokolle als PDF-Anhang." & vbCrLf & _
-        "Bitte pruefen Sie die Unterlagen und melden Sie sich gerne bei Rueckfragen." & vbCrLf & vbCrLf
+        "anbei erhalten Sie die aktuellen Prüfprotokolle als PDF-Anhang." & vbCrLf & _
+        "Bitte prüfen Sie die Unterlagen und melden Sie sich gerne bei Rückfragen." & vbCrLf & vbCrLf
 
     If Trim$(bemerkungen) <> "" Then
         text = text & "Bemerkungen aus der Checkliste:" & vbCrLf & bemerkungen & vbCrLf & vbCrLf
     End If
 
     text = text & "Herzlichen Dank." & vbCrLf & vbCrLf & _
-        "Mit freundlichen Gruessen" & vbCrLf & vbCrLf & _
+        "Mit freundlichen Grüßen" & vbCrLf & vbCrLf & _
         "Ihr Team von G.E.S. Energietechnik GmbH" & vbCrLf & vbCrLf & _
-        "Der Inhalt dieser Email ist ausschliesslich fuer den bezeichneten Adressaten bestimmt." & vbCrLf & _
+        "Der Inhalt dieser Email ist ausschließlich für den bezeichneten Adressaten bestimmt." & vbCrLf & _
         "Falls Sie nicht der vorgesehene Adressat dieser Email oder dessen Vertreter sein sollten," & vbCrLf & _
-        "so beachten Sie bitte, dass jede Form der Kenntnisnahme, Veroeffentlichung," & vbCrLf & _
-        "Vervielfaeltigung oder Weitergabe des Inhalts dieser Email unzulaessig ist." & vbCrLf & _
+        "so beachten Sie bitte, dass jede Form der Kenntnisnahme, Veröffentlichung," & vbCrLf & _
+        "Vervielfältigung oder Weitergabe des Inhalts dieser Email unzulässig ist." & vbCrLf & _
         "Wir bitten Sie, sich in diesem Fall mit dem Absender der Email in Verbindung zu setzen." & vbCrLf & vbCrLf & _
-        "G.E.S. Energietechnik GmbH: Sitz der Gesellschaft: Altmaerkische Wische - Amtsgericht Stendal," & vbCrLf & _
-        "HRB 30020 - Geschaeftsfuehrer: Gunnar Schaefer"
+        "G.E.S. Energietechnik GmbH: Sitz der Gesellschaft: Altmärkische Wische - Amtsgericht Stendal," & vbCrLf & _
+        "HRB 30020 - Geschäftsführer: Gunnar Schäfer"
 
     ErzeugeStandardMailtext = text
 End Function
@@ -260,24 +260,24 @@ Private Function ErzeugeHtmlMailtext(ByVal kundeText As String, ByVal bemerkunge
 
     text = "<html><body style='font-family:Calibri,Arial,sans-serif;font-size:11pt;'>" & _
            "<p>Sehr geehrte Damen und Herren,</p>" & _
-            "<p>anbei erhalten Sie die aktuellen Pruefprotokolle als PDF-Anhang.<br>" & _
-            "Bitte pruefen Sie die Unterlagen und melden Sie sich gerne bei Rueckfragen.</p>"
+            "<p>anbei erhalten Sie die aktuellen Prüfprotokolle als PDF-Anhang.<br>" & _
+            "Bitte prüfen Sie die Unterlagen und melden Sie sich gerne bei Rückfragen.</p>"
 
     If Trim$(bemerkungen) <> "" Then
         text = text & "<p><b>Bemerkungen aus der Checkliste:</b><br>" & bemerkHtml & "</p>"
     End If
 
     text = text & "<p>Herzlichen Dank.</p>" & _
-                  "<p>Mit freundlichen Gruessen</p>" & _
+                  "<p>Mit freundlichen Grüßen</p>" & _
                   "<p>Ihr Team von G.E.S. Energietechnik GmbH</p>" & _
                   "<p style='font-size:9pt;color:#555;'>" & _
-                  "Der Inhalt dieser Email ist ausschliesslich fuer den bezeichneten Adressaten bestimmt.<br>" & _
+                  "Der Inhalt dieser Email ist ausschließlich für den bezeichneten Adressaten bestimmt.<br>" & _
                   "Falls Sie nicht der vorgesehene Adressat dieser Email oder dessen Vertreter sein sollten,<br>" & _
-                  "so beachten Sie bitte, dass jede Form der Kenntnisnahme, Veroeffentlichung,<br>" & _
-                  "Vervielfaeltigung oder Weitergabe des Inhalts dieser Email unzulaessig ist.<br>" & _
+                  "so beachten Sie bitte, dass jede Form der Kenntnisnahme, Veröffentlichung,<br>" & _
+                  "Vervielfältigung oder Weitergabe des Inhalts dieser Email unzulässig ist.<br>" & _
                   "Wir bitten Sie, sich in diesem Fall mit dem Absender der Email in Verbindung zu setzen.<br><br>" & _
-                  "G.E.S. Energietechnik GmbH: Sitz der Gesellschaft: Altmaerkische Wische - Amtsgericht Stendal,<br>" & _
-                  "HRB 30020 - Geschaeftsfuehrer: Gunnar Schaefer" & _
+                  "G.E.S. Energietechnik GmbH: Sitz der Gesellschaft: Altmärkische Wische - Amtsgericht Stendal,<br>" & _
+                  "HRB 30020 - Geschäftsführer: Gunnar Schäfer" & _
                   "</p>"
 
     If logoPath <> "" Then
