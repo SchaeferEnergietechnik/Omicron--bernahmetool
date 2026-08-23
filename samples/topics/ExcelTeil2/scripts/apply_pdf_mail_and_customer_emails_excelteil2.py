@@ -853,6 +853,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Drop-down-Validierungen aus Referenzdatei wiederherstellen (optional)",
     )
+    parser.add_argument(
+        "--restore-reference-assets",
+        action="store_true",
+        help=(
+            "Import-Infrastruktur und Logos aus V19-Referenzdatei wiederherstellen "
+            "(in ExcelTeil2 standardmaessig aus)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1887,6 +1895,7 @@ def apply_changes_with_excel_com(
     source_rows: list[tuple[str, str, str]],
     visible: bool,
     restore_dropdowns: bool = False,
+    restore_reference_assets: bool = False,
     dropdown_reference_path: Path | None = None,
 ) -> tuple[int, int]:
     try:
@@ -2032,7 +2041,7 @@ def apply_changes_with_excel_com(
             dropdown_reference = reference_logo_path
         restored_import_infrastructure = {"sheetsSynced": 0, "tablesRecreated": 0, "connectionsCloned": 0}
 
-        if reference_logo_path is not None:
+        if restore_reference_assets and reference_logo_path is not None:
             print(f"{path}: Schritt Import-Infrastruktur aus V19 wiederherstellen ...")
             restored_import_infrastructure = _retry_excel_call(
                 lambda: restore_import_infrastructure_from_reference(excel, workbook, reference_logo_path)
@@ -2042,6 +2051,8 @@ def apply_changes_with_excel_com(
                 f"Tabellen={restored_import_infrastructure['tablesRecreated']}, "
                 f"Connections={restored_import_infrastructure['connectionsCloned']}"
             )
+        elif not restore_reference_assets:
+            print(f"{path}: V19-Referenz-Restauration deaktiviert (ExcelTeil2-Standard)")
 
         restored_logos = 0
         restored_dropdown_areas = 0
@@ -2064,7 +2075,7 @@ def apply_changes_with_excel_com(
         elif not restore_dropdowns:
             print(f"{path}: Drop-down-Restauration deaktiviert (neuer Standard)")
 
-        if reference_logo_path is not None:
+        if restore_reference_assets and reference_logo_path is not None:
 
             restored_logos = _retry_excel_call(
                 lambda: restore_logos_from_reference(excel, workbook, reference_logo_path)
@@ -2154,6 +2165,7 @@ def main() -> int:
                 source_rows,
                 visible=args.visible,
                 restore_dropdowns=args.restore_dropdowns,
+                restore_reference_assets=args.restore_reference_assets,
                 dropdown_reference_path=backup_path if args.restore_dropdowns else None,
             )
             print(f"{target}: Kundenblatt aktualisiert (gesetzt: {updated}, ohne Treffer: {missing})")
