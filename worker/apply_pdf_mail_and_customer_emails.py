@@ -701,6 +701,7 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             pass
 
         transferred_areas = 0
+        failed_areas = 0
 
         try:
             # xlCellTypeAllValidation = -4174
@@ -708,10 +709,45 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             for i in range(1, int(validated_cells.Areas.Count) + 1):
                 area = validated_cells.Areas(i)
                 address = str(area.Address)
-                area.Copy()
-                # xlPasteValidation = 6
-                ws_dst.Range(address).PasteSpecial(Paste=6)
-                transferred_areas += 1
+                src_validation = area.Validation
+                dst_range = ws_dst.Range(address)
+
+                try:
+                    dst_range.Validation.Delete()
+                except Exception:
+                    pass
+
+                try:
+                    validation_type = int(src_validation.Type)
+                    # xlValidateInputOnly = 0 (no dropdown rule to recreate)
+                    if validation_type == 0:
+                        continue
+
+                    alert_style = int(src_validation.AlertStyle)
+                    operator = int(src_validation.Operator)
+                    formula1 = src_validation.Formula1
+                    formula2 = src_validation.Formula2
+
+                    dst_range.Validation.Add(
+                        Type=validation_type,
+                        AlertStyle=alert_style,
+                        Operator=operator,
+                        Formula1=formula1,
+                        Formula2=formula2,
+                    )
+
+                    dst_validation = dst_range.Validation
+                    dst_validation.IgnoreBlank = src_validation.IgnoreBlank
+                    dst_validation.InCellDropdown = src_validation.InCellDropdown
+                    dst_validation.InputTitle = src_validation.InputTitle
+                    dst_validation.ErrorTitle = src_validation.ErrorTitle
+                    dst_validation.InputMessage = src_validation.InputMessage
+                    dst_validation.ErrorMessage = src_validation.ErrorMessage
+                    dst_validation.ShowInput = src_validation.ShowInput
+                    dst_validation.ShowError = src_validation.ShowError
+                    transferred_areas += 1
+                except Exception:
+                    failed_areas += 1
         except Exception:
             # Fallback for workbooks where SpecialCells is unavailable/unreliable.
             ws_src.UsedRange.Copy()
@@ -719,6 +755,9 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             transferred_areas = 1
 
         excel_app.CutCopyMode = False
+        if failed_areas > 0:
+            print(f"Hinweis: {failed_areas} Validierungs-Bereiche konnten nicht 1:1 kopiert werden")
+
         return transferred_areas
     finally:
         try:
@@ -727,6 +766,36 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             pass
         if ref_workbook is not None:
             ref_workbook.Close(SaveChanges=False)
+
+
+def ensure_checkliste_e_column_dropdown_fallback(workbook) -> bool:
+    ws = workbook.Worksheets("Schutzprüf-Checkliste")
+    try:
+        ws.Unprotect()
+    except Exception:
+        pass
+
+    # Typical checklist input area where x/!/ ? are entered.
+    target = ws.Range("E3:E400")
+    try:
+        target.Validation.Delete()
+    except Exception:
+        pass
+
+    try:
+        # xlValidateList = 3, xlValidAlertStop = 1
+        target.Validation.Add(Type=3, AlertStyle=1, Formula1='"x,!,?,-"')
+        target.Validation.IgnoreBlank = True
+        target.Validation.InCellDropdown = True
+        target.Validation.ShowInput = True
+        target.Validation.ShowError = True
+        target.Validation.InputTitle = "Eingabe"
+        target.Validation.InputMessage = "Bitte x, !, ? oder - auswählen."
+        target.Validation.ErrorTitle = "Ungültige Eingabe"
+        target.Validation.ErrorMessage = "Nur x, !, ? oder - sind erlaubt."
+        return True
+    except Exception:
+        return False
 
 
 def ensure_aktuelles_datum_macro(workbook) -> int:
@@ -1199,11 +1268,15 @@ def apply_changes_with_excel_com(
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
         restored_dropdown_areas = 0
+        applied_dropdown_fallback = False
         rebound_datum_buttons = 0
         if reference_logo_path is not None:
             print(f"{path}: Schritt Drop-downs aus V19 wiederherstellen ...")
             restored_dropdown_areas = _retry_excel_call(
                 lambda: restore_checkliste_dropdowns_from_reference(excel, workbook, reference_logo_path)
+            )
+            applied_dropdown_fallback = _retry_excel_call(
+                lambda: ensure_checkliste_e_column_dropdown_fallback(workbook)
             )
 
             restored_logos = _retry_excel_call(
@@ -1211,6 +1284,7 @@ def apply_changes_with_excel_com(
             )
             print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
             print(f"{path}: Drop-down-Bereiche in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdown_areas}")
+            print(f"{path}: Drop-down-Fallback E3:E400 gesetzt: {applied_dropdown_fallback}")
         else:
             print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
 
