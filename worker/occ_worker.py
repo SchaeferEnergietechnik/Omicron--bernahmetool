@@ -529,6 +529,49 @@ class Worker:
         excel.Application.Run(f"'{workbook_name}'!{macro_name}")
         self.wait(2)
 
+    def repair_daten_de_ref_formulas(self, workbook) -> int:
+        """Repair broken MATCH references in Daten!D:E (#REF/#BEZUG)."""
+        try:
+            sheet = workbook.Worksheets("Daten")
+        except Exception:
+            return 0
+
+        try:
+            # -4162 = xlUp
+            last_row_c = int(sheet.Cells(sheet.Rows.Count, 3).End(-4162).Row)
+            last_row_d = int(sheet.Cells(sheet.Rows.Count, 4).End(-4162).Row)
+            last_row_e = int(sheet.Cells(sheet.Rows.Count, 5).End(-4162).Row)
+            last_row = max(last_row_c, last_row_d, last_row_e)
+        except Exception:
+            return 0
+
+        repaired = 0
+        for row in range(1, last_row + 1):
+            for col in (4, 5):
+                cell = sheet.Cells(row, col)
+                formula = cell.Formula
+                if formula is None:
+                    continue
+                formula_text = str(formula)
+                upper = formula_text.upper()
+                if "MATCH(" not in upper:
+                    continue
+                if "#REF!" not in upper and "#BEZUG!" not in upper:
+                    continue
+
+                repaired_formula = (
+                    formula_text
+                    .replace("(#REF!)", "(Measurements[MeasurementName])")
+                    .replace("(#BEZUG!)", "(Measurements[MeasurementName])")
+                    .replace("#REF!", "Measurements[MeasurementName]")
+                    .replace("#BEZUG!", "Measurements[MeasurementName]")
+                )
+                if repaired_formula != formula_text:
+                    cell.Formula = repaired_formula
+                    repaired += 1
+
+        return repaired
+
     def normalize_text(self, value: str) -> str:
         normalized = value.lower().strip()
         normalized = normalized.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
@@ -919,6 +962,25 @@ class Worker:
                     "excel_refresh_warning",
                     itemId=item.get("id"),
                     message=f"RefreshAll konnte nicht vollständig abgeschlossen werden: {error}",
+                )
+
+            try:
+                repaired_count = self.repair_daten_de_ref_formulas(workbook)
+                if repaired_count > 0:
+                    self.emit(
+                        "excel_formula_repair",
+                        itemId=item.get("id"),
+                        sheet="Daten",
+                        columns="D:E",
+                        repairedCount=repaired_count,
+                    )
+            except Exception as error:
+                self.emit(
+                    "excel_formula_repair_warning",
+                    itemId=item.get("id"),
+                    sheet="Daten",
+                    columns="D:E",
+                    message=f"Formelreparatur in Daten!D:E fehlgeschlagen: {error}",
                 )
 
             try:
