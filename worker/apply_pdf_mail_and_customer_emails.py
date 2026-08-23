@@ -701,7 +701,48 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             pass
 
         transferred_areas = 0
+        recovered_areas = 0
         failed_areas: list[str] = []
+
+        def _copy_validation(src_range, dst_range) -> bool:
+            try:
+                src_validation = src_range.Validation
+                validation_type = int(src_validation.Type)
+                # xlValidateInputOnly = 0 (no dropdown rule to recreate)
+                if validation_type == 0:
+                    return False
+
+                alert_style = int(src_validation.AlertStyle)
+                operator = int(src_validation.Operator)
+                formula1 = src_validation.Formula1
+                formula2 = src_validation.Formula2
+
+                try:
+                    dst_range.Validation.Delete()
+                except Exception:
+                    pass
+
+                dst_range.Validation.Add(
+                    Type=validation_type,
+                    AlertStyle=alert_style,
+                    Operator=operator,
+                    Formula1=formula1,
+                    Formula2=formula2,
+                )
+
+                dst_validation = dst_range.Validation
+                dst_validation.IgnoreBlank = src_validation.IgnoreBlank
+                dst_validation.InCellDropdown = src_validation.InCellDropdown
+                dst_validation.InputTitle = src_validation.InputTitle
+                dst_validation.ErrorTitle = src_validation.ErrorTitle
+                dst_validation.InputMessage = src_validation.InputMessage
+                dst_validation.ErrorMessage = src_validation.ErrorMessage
+                dst_validation.ShowInput = src_validation.ShowInput
+                dst_validation.ShowError = src_validation.ShowError
+
+                return int(dst_range.Validation.Type) != 0
+            except Exception:
+                return False
 
         try:
             # xlCellTypeAllValidation = -4174
@@ -709,7 +750,6 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             for i in range(1, int(validated_cells.Areas.Count) + 1):
                 area = validated_cells.Areas(i)
                 address = str(area.Address)
-                src_validation = area.Validation
                 dst_range = ws_dst.Range(address)
 
                 try:
@@ -729,40 +769,9 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
                 except Exception:
                     pass
 
-                try:
-                    validation_type = int(src_validation.Type)
-                    # xlValidateInputOnly = 0 (no dropdown rule to recreate)
-                    if validation_type == 0:
-                        continue
-
-                    alert_style = int(src_validation.AlertStyle)
-                    operator = int(src_validation.Operator)
-                    formula1 = src_validation.Formula1
-                    formula2 = src_validation.Formula2
-
-                    dst_range.Validation.Add(
-                        Type=validation_type,
-                        AlertStyle=alert_style,
-                        Operator=operator,
-                        Formula1=formula1,
-                        Formula2=formula2,
-                    )
-
-                    dst_validation = dst_range.Validation
-                    dst_validation.IgnoreBlank = src_validation.IgnoreBlank
-                    dst_validation.InCellDropdown = src_validation.InCellDropdown
-                    dst_validation.InputTitle = src_validation.InputTitle
-                    dst_validation.ErrorTitle = src_validation.ErrorTitle
-                    dst_validation.InputMessage = src_validation.InputMessage
-                    dst_validation.ErrorMessage = src_validation.ErrorMessage
-                    dst_validation.ShowInput = src_validation.ShowInput
-                    dst_validation.ShowError = src_validation.ShowError
-
-                    if int(dst_range.Validation.Type) != 0:
-                        transferred_areas += 1
-                    else:
-                        failed_areas.append(address)
-                except Exception:
+                if _copy_validation(area, dst_range):
+                    transferred_areas += 1
+                else:
                     failed_areas.append(address)
         except Exception:
             # Fallback for workbooks where SpecialCells is unavailable/unreliable.
@@ -770,12 +779,56 @@ def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, refe
             ws_dst.UsedRange.PasteSpecial(Paste=6)
             transferred_areas = 1
 
+        if failed_areas:
+            still_failed: list[str] = []
+            for address in failed_areas:
+                src_area = ws_src.Range(address)
+                area_recovered = False
+
+                for i in range(1, int(src_area.Cells.Count) + 1):
+                    src_cell = src_area.Cells(i)
+                    dst_cell = ws_dst.Cells(src_cell.Row, src_cell.Column)
+
+                    try:
+                        if bool(src_cell.MergeCells):
+                            src_anchor = src_cell.MergeArea.Cells(1, 1)
+                            if str(src_cell.Address) != str(src_anchor.Address):
+                                continue
+                            src_target = src_cell.MergeArea
+                        else:
+                            src_target = src_cell
+                    except Exception:
+                        src_target = src_cell
+
+                    try:
+                        if bool(dst_cell.MergeCells):
+                            dst_anchor = dst_cell.MergeArea.Cells(1, 1)
+                            if str(dst_cell.Address) != str(dst_anchor.Address):
+                                continue
+                            dst_target = dst_cell.MergeArea
+                        else:
+                            dst_target = dst_cell
+                    except Exception:
+                        dst_target = dst_cell
+
+                    if _copy_validation(src_target, dst_target):
+                        area_recovered = True
+
+                if area_recovered:
+                    recovered_areas += 1
+                else:
+                    still_failed.append(address)
+
+            failed_areas = still_failed
+
         excel_app.CutCopyMode = False
         if failed_areas:
             print(f"Hinweis: {len(failed_areas)} Validierungs-Bereiche konnten nicht 1:1 kopiert werden")
             print(f"Hinweis: Betroffene Bereiche: {', '.join(failed_areas[:8])}")
+        if recovered_areas > 0:
+            print(f"Hinweis: Zusätzliche Validierungs-Bereiche zellweise repariert: {recovered_areas}")
 
-        return transferred_areas
+        return transferred_areas + recovered_areas
     finally:
         try:
             excel_app.CutCopyMode = False
