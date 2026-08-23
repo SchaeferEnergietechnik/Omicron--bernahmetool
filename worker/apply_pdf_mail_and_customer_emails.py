@@ -13,12 +13,11 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 DEFAULT_TARGETS_REAL = [
-    Path("samples/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
-    Path("samples/topics/excel-basis/V20f_Schutzprüfprotokoll-Checkliste.xlsm"),
+    Path("samples/topics/excel-basis/V20g_Schutzprüfprotokoll-Checkliste.xlsm"),
 ]
 
 DEFAULT_TARGETS_FALLBACK = [
+    Path("samples/topics/excel-basis/V20g_Schutzpruefprotokoll-Checkliste.xlsm"),
     Path("samples/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
     Path("samples/topics/excel-basis/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
     Path("samples/topics/excel-basis/V20f_Schutzpruefprotokoll-Checkliste.xlsm"),
@@ -535,6 +534,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Excel sichtbar starten (Debug)",
     )
+    parser.add_argument(
+        "--restore-dropdowns",
+        action="store_true",
+        help="Drop-down-Validierungen aus Referenzdatei wiederherstellen (optional)",
+    )
     return parser.parse_args()
 
 
@@ -619,7 +623,7 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
         return _unique_paths(filtered)
 
     raise FileNotFoundError(
-        "Keine passende V20d-Ziel-XLSM gefunden. Bitte mit --targets die V20d-Datei explizit angeben."
+        "Keine passende V20-Ziel-XLSM gefunden. Bitte mit --targets die Datei explizit angeben."
     )
 
 
@@ -1389,6 +1393,7 @@ def apply_changes_with_excel_com(
     path: Path,
     source_rows: list[tuple[str, str, str]],
     visible: bool,
+    restore_dropdowns: bool = False,
     dropdown_reference_path: Path | None = None,
 ) -> tuple[int, int]:
     try:
@@ -1489,14 +1494,14 @@ def apply_changes_with_excel_com(
 
         reference_logo_path = resolve_logo_reference_path(path)
         dropdown_reference = dropdown_reference_path
-        if dropdown_reference is None or not dropdown_reference.exists():
+        if restore_dropdowns and (dropdown_reference is None or not dropdown_reference.exists()):
             dropdown_reference = reference_logo_path
         restored_logos = 0
         restored_dropdown_areas = 0
         restored_x14_dropdowns = 0
         added_dropdown_fallback_cells = 0
         rebound_datum_buttons = 0
-        if dropdown_reference is not None:
+        if restore_dropdowns and dropdown_reference is not None:
             print(f"{path}: Schritt Drop-downs aus V19 wiederherstellen ...")
             restored_dropdown_areas = _retry_excel_call(
                 lambda: restore_checkliste_dropdowns_from_reference(excel, workbook, dropdown_reference)
@@ -1509,6 +1514,8 @@ def apply_changes_with_excel_com(
             )
 
             print(f"{path}: Drop-down-Referenz: {dropdown_reference}")
+        elif not restore_dropdowns:
+            print(f"{path}: Drop-down-Restauration deaktiviert (neuer Standard)")
 
         if reference_logo_path is not None:
 
@@ -1520,12 +1527,12 @@ def apply_changes_with_excel_com(
             print(f"{path}: x14-Drop-down-Regeln wiederhergestellt: {restored_x14_dropdowns}")
             print(f"{path}: Drop-down-Fallback E3:E400 ergänzt (Zellen): {added_dropdown_fallback_cells}")
         else:
-            if dropdown_reference is not None:
+            if restore_dropdowns and dropdown_reference is not None:
                 print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
                 print(f"{path}: Drop-down-Bereiche in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdown_areas}")
                 print(f"{path}: x14-Drop-down-Regeln wiederhergestellt: {restored_x14_dropdowns}")
                 print(f"{path}: Drop-down-Fallback E3:E400 ergänzt (Zellen): {added_dropdown_fallback_cells}")
-            else:
+            elif restore_dropdowns:
                 print(f"{path}: Keine Referenzdatei fuer Drop-down- oder Logo-Wiederherstellung gefunden")
 
         print(f"{path}: Schritt Makro 'Aktuelles Datum' robust setzen ...")
@@ -1589,7 +1596,8 @@ def main() -> int:
                 target,
                 source_rows,
                 visible=args.visible,
-                dropdown_reference_path=backup_path,
+                restore_dropdowns=args.restore_dropdowns,
+                dropdown_reference_path=backup_path if args.restore_dropdowns else None,
             )
             print(f"{target}: Kundenblatt aktualisiert (gesetzt: {updated}, ohne Treffer: {missing})")
             print(f"{target}: VBA frmPDFDruck aktualisiert")
