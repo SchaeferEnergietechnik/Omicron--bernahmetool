@@ -656,6 +656,40 @@ def update_customer_sheet(path: Path, source_rows: list[tuple[str, str, str]]) -
     return updated, missing
 
 
+def update_customer_sheet_excel_com(workbook, source_rows: list[tuple[str, str, str]]) -> tuple[int, int]:
+    try:
+        ws = workbook.Worksheets(CUSTOMER_SHEET)
+    except Exception as error:
+        raise RuntimeError(f"Blatt '{CUSTOMER_SHEET}' nicht gefunden in {workbook.Name}.") from error
+
+    last_row = int(ws.Cells(ws.Rows.Count, 1).End(-4162).Row)  # xlUp
+    updated = 0
+    missing = 0
+
+    for row in range(1, last_row + 1):
+        customer_value = ws.Cells(row, 1).Value
+        if customer_value is None:
+            continue
+        customer_text = str(customer_value).strip()
+        if not customer_text:
+            continue
+
+        email = pick_email_for_customer(customer_text, source_rows)
+        current_email = ws.Cells(row, 2).Value
+        current_text = "" if current_email is None else str(current_email)
+
+        if email:
+            if current_text != email:
+                ws.Cells(row, 2).Value = email
+                updated += 1
+        else:
+            if current_text != "":
+                ws.Cells(row, 2).Value = ""
+            missing += 1
+
+    return updated, missing
+
+
 def patch_pdf_form_vba(path: Path, visible: bool) -> None:
     try:
         import pythoncom
@@ -693,6 +727,60 @@ def patch_pdf_form_vba(path: Path, visible: bool) -> None:
         pythoncom.CoUninitialize()
 
 
+def apply_changes_with_excel_com(
+    path: Path,
+    source_rows: list[tuple[str, str, str]],
+    visible: bool,
+) -> tuple[int, int]:
+    try:
+        import pythoncom
+        import win32com.client
+        import win32api
+    except ImportError as error:
+        raise RuntimeError(
+            "Excel-COM ist nicht verfuegbar. Bitte unter Windows mit pywin32 ausfuehren."
+        ) from error
+
+    pythoncom.CoInitialize()
+    excel = None
+    workbook = None
+
+    try:
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = bool(visible)
+        excel.DisplayAlerts = False
+        excel.AskToUpdateLinks = False
+
+        workbook_path = str(path.resolve())
+        try:
+            short_path = win32api.GetShortPathName(workbook_path)
+            if short_path:
+                workbook_path = short_path
+        except Exception:
+            pass
+
+        workbook = excel.Workbooks.Open(workbook_path)
+
+        updated, missing = update_customer_sheet_excel_com(workbook, source_rows)
+
+        component = workbook.VBProject.VBComponents("frmPDFDruck")
+        module = component.CodeModule
+        if module.CountOfLines > 0:
+            module.DeleteLines(1, module.CountOfLines)
+        module.AddFromString(FORM_CODE)
+
+        workbook.Save()
+        workbook.Close(SaveChanges=True)
+        workbook = None
+        return updated, missing
+    finally:
+        if workbook is not None:
+            workbook.Close(SaveChanges=False)
+        if excel is not None:
+            excel.Quit()
+        pythoncom.CoUninitialize()
+
+
 def main() -> int:
     args = parse_args()
     source_path = resolve_source_path(args.source)
@@ -710,15 +798,25 @@ def main() -> int:
     for target in targets:
         print(f"- {target}")
 
+    failures: list[str] = []
+
     for target in targets:
-        backup_path = backup_file(target, args.backup_suffix)
-        print(f"Sicherung erstellt: {backup_path}")
+        try:
+            backup_path = backup_file(target, args.backup_suffix)
+            print(f"Sicherung erstellt: {backup_path}")
 
-        updated, missing = update_customer_sheet(target, source_rows)
-        print(f"{target}: Kundenblatt aktualisiert (gesetzt: {updated}, ohne Treffer: {missing})")
+            updated, missing = apply_changes_with_excel_com(target, source_rows, visible=args.visible)
+            print(f"{target}: Kundenblatt aktualisiert (gesetzt: {updated}, ohne Treffer: {missing})")
+            print(f"{target}: VBA frmPDFDruck aktualisiert")
+        except Exception as error:
+            failures.append(f"{target}: {error}")
+            print(f"Warnung: Verarbeitung fehlgeschlagen fuer {target}: {error}")
 
-        patch_pdf_form_vba(target, visible=args.visible)
-        print(f"{target}: VBA frmPDFDruck aktualisiert")
+    if failures:
+        print("\nFolgende Dateien konnten nicht verarbeitet werden:", file=sys.stderr)
+        for item in failures:
+            print(f"- {item}", file=sys.stderr)
+        return 1
 
     print("Fertig: PDF->E-Mail-Option und Kunden-E-Mail-Spalte sind eingepflegt.")
     return 0
