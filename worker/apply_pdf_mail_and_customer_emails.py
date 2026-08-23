@@ -912,12 +912,13 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
     )
     ws_protokoll.Range("A3").Formula = lock_formula
 
-    lock_cf_formula = f'=$A$3="{lock_message}"'
+    lock_cf_formula = f'="{lock_message}"'
     try:
         a3_cell = ws_protokoll.Range("A3")
         a3_cell.FormatConditions.Delete()
-        lock_rule = a3_cell.FormatConditions.Add(Type=2, Formula1=lock_cf_formula)
+        lock_rule = a3_cell.FormatConditions.Add(Type=1, Operator=3, Formula1=lock_cf_formula)
         lock_rule.Interior.Color = 255
+        lock_rule.Font.Color = 16777215
     except Exception as error:
         print(f"Hinweis: CF-Regel fuer A3 konnte nicht gesetzt/geprueft werden: {error}")
 
