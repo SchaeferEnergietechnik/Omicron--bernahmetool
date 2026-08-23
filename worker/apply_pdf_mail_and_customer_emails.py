@@ -1039,11 +1039,6 @@ def restore_import_infrastructure_from_reference(excel_app, target_workbook, ref
                 continue
 
             try:
-                ws_dst.Cells.Clear()
-            except Exception:
-                pass
-
-            try:
                 ws_src.UsedRange.Copy()
                 ws_dst.Range("A1").PasteSpecial(Paste=-4104)  # xlPasteAll
                 ws_dst.Range("A1").PasteSpecial(Paste=8)  # xlPasteColumnWidths
@@ -1053,26 +1048,8 @@ def restore_import_infrastructure_from_reference(excel_app, target_workbook, ref
 
             summary["sheetsSynced"] += 1
 
-            try:
-                for i in range(int(ws_dst.ListObjects.Count), 0, -1):
-                    ws_dst.ListObjects(i).Delete()
-            except Exception:
-                pass
-
-            try:
-                for i in range(1, int(ws_src.ListObjects.Count) + 1):
-                    src_table = ws_src.ListObjects(i)
-                    src_range_address = str(src_table.Range.Address)
-                    target_range = ws_dst.Range(src_range_address)
-                    list_object = ws_dst.ListObjects.Add(SourceType=1, Source=target_range, XlListObjectHasHeaders=1)
-                    list_object.Name = str(src_table.Name)
-                    try:
-                        list_object.TableStyle = src_table.TableStyle
-                    except Exception:
-                        pass
-                    summary["tablesRecreated"] += 1
-            except Exception:
-                pass
+            # QueryTable-Verknüpfungen hängen an bestehenden ListObjects.
+            # Deshalb werden Tabellen hier absichtlich nicht gelöscht/neu erstellt.
 
         try:
             existing_names: set[str] = set()
