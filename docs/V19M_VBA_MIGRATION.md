@@ -43,6 +43,29 @@ Die Fachlogik und verwendeten Zellen bleiben gleich.
 9. Den bestehenden Excel-Button separat testen, damit seine W14-Regel erhalten bleibt.
 10. Danach einen vollständigen Testlauf des Python-Programms an einer Kopie durchführen.
 
+## Automatisierte Übertragung unter Windows
+
+Alternativ kann die Migration für die beiden Beispiel-Dateien automatisiert per Excel-COM erfolgen:
+
+```powershell
+python worker\migrate_v19g_vba_to_v19m.py
+```
+
+Das Skript:
+
+- erstellt Sicherungskopien beider Sample-Dateien,
+- exportiert `Modul1` aus V19g,
+- ersetzt das Standardmodul `Modul1` in V19m,
+- prüft, dass `Public Sub BereicheEinOderAusblenden_Start()` in V19m vorhanden ist,
+- speichert V19m.
+
+Voraussetzungen:
+
+- Windows mit installiertem Excel,
+- Python mit `pywin32`,
+- in Excel ist der Zugriff auf das VBA-Projektmodell erlaubt:
+	`Datei -> Optionen -> Trust Center -> Einstellungen fuer das Trust Center -> Makroeinstellungen -> Zugriff auf das VBA-Projektobjektmodell vertrauen`.
+
 ## Python-Aufrufe
 
 Nach der Ergänzung kann das bestehende Python-Programm alle drei Aufrufe unverändert ausführen:
