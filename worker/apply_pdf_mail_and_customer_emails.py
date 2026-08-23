@@ -13,11 +13,13 @@ from openpyxl import load_workbook
 DEFAULT_TARGETS_REAL = [
     Path("samples/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
     Path("samples/topics/excel-basis/V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20f_Schutzprüfprotokoll-Checkliste.xlsm"),
 ]
 
 DEFAULT_TARGETS_FALLBACK = [
     Path("samples/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
     Path("samples/topics/excel-basis/V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
+    Path("samples/topics/excel-basis/V20f_Schutzpruefprotokoll-Checkliste.xlsm"),
     Path("V20d_Übergeordneter_Entkupplungsschutz.xlsm"),
     Path("V20d_Uebergeordneter_Entkupplungsschutz.xlsm"),
 ]
@@ -571,6 +573,10 @@ def resolve_target_paths(targets: list[Path]) -> list[Path]:
         "**/*V20d*Uebergeordneter_Entkupplungsschutz*.xlsm",
         "**/*V20D*Uebergeordneter_Entkupplungsschutz*.xlsm",
         "**/*v20d*Uebergeordneter_Entkupplungsschutz*.xlsm",
+        "**/*V20*Schutzprüfprotokoll-Checkliste*.xlsm",
+        "**/*V20*Schutzpruefprotokoll-Checkliste*.xlsm",
+        "**/*v20*Schutzprüfprotokoll-Checkliste*.xlsm",
+        "**/*v20*Schutzpruefprotokoll-Checkliste*.xlsm",
     ]:
         recursive_hits.extend(sorted(Path(".").glob(pattern)))
 
@@ -845,12 +851,12 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Map "!" from checklist-linked fields to "NICHT OK" so existing warning semantics apply.
     formula_updates = {
-        "C105": "=IF('Schutzprüf-Checkliste'!J70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J70=\"!\",\"NICHT OK\",\"\"))",
-        "C106": "=IF('Schutzprüf-Checkliste'!L70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L70=\"!\",\"NICHT OK\",\"\"))",
-        "C107": "=IF('Schutzprüf-Checkliste'!J71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J71=\"!\",\"NICHT OK\",\"\"))",
-        "C108": "=IF('Schutzprüf-Checkliste'!L71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L71=\"!\",\"NICHT OK\",\"\"))",
-        "C114": "=IF('Schutzprüf-Checkliste'!J72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!J72=\"!\",\"NICHT OK\",\"\"))",
-        "C115": "=IF('Schutzprüf-Checkliste'!L72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!L72=\"!\",\"NICHT OK\",\"\"))",
+        "C105": "=IF('Schutzprüf-Checkliste'!E70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E70=\"!\",\"NICHT OK\",\"\"))",
+        "C106": "=IF('Schutzprüf-Checkliste'!E70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E70=\"!\",\"NICHT OK\",\"\"))",
+        "C107": "=IF('Schutzprüf-Checkliste'!E71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E71=\"!\",\"NICHT OK\",\"\"))",
+        "C108": "=IF('Schutzprüf-Checkliste'!E71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E71=\"!\",\"NICHT OK\",\"\"))",
+        "C114": "=IF('Schutzprüf-Checkliste'!E72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E72=\"!\",\"NICHT OK\",\"\"))",
+        "C115": "=IF('Schutzprüf-Checkliste'!E72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E72=\"!\",\"NICHT OK\",\"\"))",
         "C109": "=IF('Schutzprüf-Checkliste'!E74=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E74=\"!\",\"NICHT OK\",\"\"))",
     }
     for cell, formula in formula_updates.items():
@@ -858,12 +864,12 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Ensure description rows in Abschlussbemerkungen are also shown for "!".
     protokoll_formula_updates = {
-        "A169": "=IF(OR('Schutzprüf-Checkliste'!J70=TRUE,'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!J70=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
-        "A170": "=IF(OR('Schutzprüf-Checkliste'!L70=TRUE,'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!L70=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
-        "A171": "=IF(OR('Schutzprüf-Checkliste'!J71=TRUE,'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!J71=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A172": "=IF(OR('Schutzprüf-Checkliste'!L71=TRUE,'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!L71=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A173": "=IF(OR('Schutzprüf-Checkliste'!J72=TRUE,'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!J72=\"!\"),'Allgemeine Angaben'!A114,\"\")",
-        "A174": "=IF(OR('Schutzprüf-Checkliste'!L72=TRUE,'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!L72=\"!\"),'Allgemeine Angaben'!A115,\"\")",
+        "A169": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
+        "A170": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
+        "A171": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A172": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A173": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\"),'Allgemeine Angaben'!A114,\"\")",
+        "A174": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\"),'Allgemeine Angaben'!A115,\"\")",
         "A182": "=IF(OR('Schutzprüf-Checkliste'!E74=\"x\",'Schutzprüf-Checkliste'!E74=\"!\"),\"DC USV für übergeordneter Schutz/ggfs. UMZ-Schutz in Ordnung\",\"\")",
     }
     for cell, formula in protokoll_formula_updates.items():
