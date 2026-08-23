@@ -9,6 +9,7 @@
 - Neuer Zielstandard fuer den Worker: `samples/topics/excel-basis/V20g_Schutzprüfprotokoll-Checkliste.xlsm`.
 - Drop-down-Restauration ist **standardmaessig deaktiviert**, um bestehende Inhalte in neuen Vorlagen nicht unbeabsichtigt zu ueberschreiben.
 - Falls erforderlich, kann die Drop-down-Restauration explizit per `--restore-dropdowns` aktiviert werden.
+- Erfolgreich verarbeitete lokale Fundordner werden nun automatisch nach `Protokollentwuerfe` verschoben; bestehende Zielordner werden dabei nicht ueberschrieben, sondern als Hinweis protokolliert.
 - Logik fuer Abschlussbemerkungen angepasst:
   - `!` fuehrt zu `NICHT OK` in relevanten Feldern.
   - Einblendung der zugehoerigen Abschlussbemerkungszeilen ist an die MS/NS-Haken gekoppelt.
@@ -146,7 +147,6 @@ Interne Termine und Abwesenheiten, beispielsweise Urlaub oder Elternzeit, dürfe
 
 ## Offene fachliche Punkte
 
-- Erfolgreiche Fundordner werden noch nicht automatisch nach `Protokollentwürfe` verschoben.
 - Abschlussprotokoll, Wiederholung fehlgeschlagener Einträge und atomare Excel-Sicherung fehlen noch.
 
 - Nummernkreise und vollständige Namen weiterer Protokollersteller festlegen. `Allgemeine Angaben!C7` und das Protokollnummernmakro unterstützen derzeit nur `Gunnar Schäfer` und `Kevin Koehn`.

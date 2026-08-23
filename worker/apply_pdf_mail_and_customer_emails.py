@@ -102,6 +102,8 @@ Private Sub cmdOK_Click()
     End If
 
     If chkBlatt1.Value = True Then
+        PreparePruefprotokollPdfLayout wb.Sheets("Prüfprotokoll")
+
         dateiname = stationPrefix & wb.Sheets("Allgemeine Angaben").Range("C5").Value & "_" & _
                     wb.Sheets("Prüfprotokoll").Range("H13").Value & "_" & _
                     IIf(schutz = "Entkupplungsschutz", "Übergeordneter-Schutz", "UMZ-Schutz")
@@ -157,6 +159,325 @@ Private Sub cmdOK_Click()
 
     Unload Me
 End Sub
+
+Private Sub PreparePruefprotokollPdfLayout(ByVal ws As Worksheet)
+    On Error GoTo clean_exit
+
+    Dim lastRow As Long
+    Dim lastCol As Long
+    Dim headerLastRow As Long
+    Dim sectionStarts() As Long
+    Dim sectionCount As Long
+    Dim autoBreakRows() As Long
+    Dim autoBreakCount As Long
+    Dim manualBreakRows() As Long
+    Dim manualBreakCount As Long
+    Dim hp As HPageBreak
+    Dim breakRow As Long
+    Dim rowBefore As Long
+    Dim rowAfter As Long
+
+    lastRow = LastUsedRow(ws)
+    lastCol = LastUsedCol(ws)
+    If lastRow < 1 Or lastCol < 1 Then Exit Sub
+
+    sectionCount = BuildSectionStarts(ws.Parent, sectionStarts, lastRow)
+    headerLastRow = ResolveHeaderLastRow(sectionStarts, sectionCount, lastRow)
+
+    With ws.PageSetup
+        .Zoom = False
+        .FitToPagesWide = 1
+        .FitToPagesTall = False
+        If headerLastRow >= 1 Then
+            .PrintTitleRows = "$1:$" & CStr(headerLastRow)
+        End If
+    End With
+
+    ws.ResetAllPageBreaks
+    ws.PageSetup.PrintArea = ws.Range(ws.Cells(1, 1), ws.Cells(lastRow, lastCol)).Address
+
+    ' Erzwingt die Berechnung der automatischen Seitenumbrueche
+    autoBreakCount = CollectPageBreakRows(ws, autoBreakRows)
+    manualBreakCount = CollectManualBreakCandidates(ws, autoBreakRows, autoBreakCount, sectionStarts, sectionCount, lastRow, manualBreakRows)
+
+    If manualBreakCount > 0 Then
+        ws.ResetAllPageBreaks
+        ApplyManualPageBreaks ws, manualBreakRows, manualBreakCount
+    End If
+
+    ' Umbruchkanten fuer sichtbare Zeilen grafisch angleichen
+    autoBreakCount = CollectPageBreakRows(ws, autoBreakRows)
+
+    For Each hp In ws.HPageBreaks
+        breakRow = hp.Location.Row
+        rowBefore = PreviousVisibleRow(ws, breakRow - 1)
+        rowAfter = NextVisibleRow(ws, breakRow, lastRow)
+
+        If rowBefore > 0 And rowAfter > 0 Then
+            HarmonizeBreakBorders ws, rowBefore, rowAfter, lastCol
+        End If
+    Next hp
+
+clean_exit:
+End Sub
+
+Private Function CollectPageBreakRows(ByVal ws As Worksheet, ByRef rows() As Long) As Long
+    Dim hp As HPageBreak
+    Dim count As Long
+
+    count = 0
+    For Each hp In ws.HPageBreaks
+        AddUniqueSortedRow rows, count, CLng(hp.Location.Row)
+    Next hp
+
+    CollectPageBreakRows = count
+End Function
+
+Private Function CollectManualBreakCandidates(
+    ByVal ws As Worksheet,
+    ByRef autoBreakRows() As Long,
+    ByVal autoBreakCount As Long,
+    ByRef sectionStarts() As Long,
+    ByVal sectionCount As Long,
+    ByVal lastRow As Long,
+    ByRef resultRows() As Long
+) As Long
+    Dim i As Long
+    Dim pageStart As Long
+    Dim breakRow As Long
+    Dim sectionStart As Long
+    Dim candidateRow As Long
+    Dim count As Long
+
+    pageStart = 1
+    count = 0
+
+    For i = 1 To autoBreakCount
+        breakRow = autoBreakRows(i)
+        sectionStart = SectionStartForRow(breakRow, sectionStarts, sectionCount)
+        If sectionStart > pageStart And sectionStart < breakRow Then
+            candidateRow = NextVisibleRow(ws, sectionStart, lastRow)
+            If candidateRow > pageStart And candidateRow < breakRow Then
+                AddUniqueSortedRow resultRows, count, candidateRow
+            End If
+        End If
+        pageStart = breakRow
+    Next i
+
+    CollectManualBreakCandidates = count
+End Function
+
+Private Sub ApplyManualPageBreaks(ByVal ws As Worksheet, ByRef breakRows() As Long, ByVal breakCount As Long)
+    Dim i As Long
+
+    For i = 1 To breakCount
+        If breakRows(i) > 1 Then
+            ws.HPageBreaks.Add Before:=ws.Rows(breakRows(i))
+        End If
+    Next i
+End Sub
+
+Private Function BuildSectionStarts(ByVal wb As Workbook, ByRef starts() As Long, ByVal maxRow As Long) As Long
+    Dim wsAngaben As Worksheet
+    Dim count As Long
+    Dim startZeile As Long
+    Dim H14 As Long
+    Dim H15 As Long
+    Dim H16 As Long
+    Dim H17 As Long
+    Dim H18 As Long
+    Dim H19 As Long
+    Dim H20 As Long
+    Dim H21 As Long
+    Dim H22 As Long
+    Dim H23 As Long
+    Dim H24 As Long
+    Dim H25 As Long
+
+    On Error GoTo fail
+    Set wsAngaben = wb.Worksheets("Allgemeine Angaben")
+
+    count = 0
+    startZeile = 1
+    H14 = startZeile + CLng(Val(wsAngaben.Range("H14").Value))
+    H15 = H14 + CLng(Val(wsAngaben.Range("H15").Value))
+    H20 = H15 + CLng(Val(wsAngaben.Range("H20").Value))
+    H21 = H20 + CLng(Val(wsAngaben.Range("H21").Value))
+    H16 = H21 + CLng(Val(wsAngaben.Range("H16").Value))
+    H17 = H16 + CLng(Val(wsAngaben.Range("H17").Value))
+    H18 = H17 + CLng(Val(wsAngaben.Range("H18").Value))
+    H19 = H18 + CLng(Val(wsAngaben.Range("H19").Value))
+    H23 = H19 + CLng(Val(wsAngaben.Range("H23").Value))
+    H24 = H23 + CLng(Val(wsAngaben.Range("H24").Value))
+    H22 = H24 + CLng(Val(wsAngaben.Range("H22").Value))
+    H25 = H22 + CLng(Val(wsAngaben.Range("H25").Value))
+
+    AddUniqueSortedRow starts, count, ClampRow(H14, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H15, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H20, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H21, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H16, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H17, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H18, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H19, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H23, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H24, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H22, maxRow)
+    AddUniqueSortedRow starts, count, ClampRow(H25, maxRow)
+
+    BuildSectionStarts = count
+    Exit Function
+
+fail:
+    BuildSectionStarts = 0
+End Function
+
+Private Function ClampRow(ByVal rowValue As Long, ByVal maxRow As Long) As Long
+    If rowValue < 1 Then
+        ClampRow = 1
+    ElseIf rowValue > maxRow Then
+        ClampRow = maxRow
+    Else
+        ClampRow = rowValue
+    End If
+End Function
+
+Private Function ResolveHeaderLastRow(ByRef sectionStarts() As Long, ByVal sectionCount As Long, ByVal lastRow As Long) As Long
+    Dim i As Long
+    Dim firstDataRow As Long
+
+    firstDataRow = 0
+    For i = 1 To sectionCount
+        If sectionStarts(i) > 1 Then
+            firstDataRow = sectionStarts(i)
+            Exit For
+        End If
+    Next i
+
+    If firstDataRow > 1 Then
+        ResolveHeaderLastRow = firstDataRow - 1
+    Else
+        ResolveHeaderLastRow = 13
+    End If
+
+    If ResolveHeaderLastRow > lastRow Then ResolveHeaderLastRow = lastRow
+End Function
+
+Private Function SectionStartForRow(ByVal rowNumber As Long, ByRef sectionStarts() As Long, ByVal sectionCount As Long) As Long
+    Dim i As Long
+
+    SectionStartForRow = 0
+    For i = 1 To sectionCount
+        If sectionStarts(i) < rowNumber Then
+            SectionStartForRow = sectionStarts(i)
+        Else
+            Exit For
+        End If
+    Next i
+End Function
+
+Private Sub AddUniqueSortedRow(ByRef rows() As Long, ByRef count As Long, ByVal rowValue As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim temp As Long
+
+    If rowValue <= 0 Then Exit Sub
+
+    For i = 1 To count
+        If rows(i) = rowValue Then Exit Sub
+    Next i
+
+    count = count + 1
+    ReDim Preserve rows(1 To count)
+    rows(count) = rowValue
+
+    For i = 1 To count - 1
+        For j = i + 1 To count
+            If rows(i) > rows(j) Then
+                temp = rows(i)
+                rows(i) = rows(j)
+                rows(j) = temp
+            End If
+        Next j
+    Next i
+End Sub
+
+Private Sub HarmonizeBreakBorders(ByVal ws As Worksheet, ByVal rowBefore As Long, ByVal rowAfter As Long, ByVal lastCol As Long)
+    Dim rngBefore As Range
+    Dim rngAfter As Range
+
+    Set rngBefore = ws.Range(ws.Cells(rowBefore, 1), ws.Cells(rowBefore, lastCol))
+    Set rngAfter = ws.Range(ws.Cells(rowAfter, 1), ws.Cells(rowAfter, lastCol))
+
+    If Not HasEdgeBorder(rngBefore, xlEdgeBottom) And HasEdgeBorder(rngAfter, xlEdgeTop) Then
+        CopyBorderEdge rngAfter, xlEdgeTop, rngBefore, xlEdgeBottom
+    End If
+
+    If Not HasEdgeBorder(rngAfter, xlEdgeTop) And HasEdgeBorder(rngBefore, xlEdgeBottom) Then
+        CopyBorderEdge rngBefore, xlEdgeBottom, rngAfter, xlEdgeTop
+    End If
+End Sub
+
+Private Function HasEdgeBorder(ByVal rng As Range, ByVal edge As XlBordersIndex) As Boolean
+    On Error Resume Next
+    HasEdgeBorder = (rng.Borders(edge).LineStyle <> xlLineStyleNone)
+    On Error GoTo 0
+End Function
+
+Private Sub CopyBorderEdge(ByVal srcRange As Range, ByVal srcEdge As XlBordersIndex, ByVal dstRange As Range, ByVal dstEdge As XlBordersIndex)
+    On Error Resume Next
+
+    With dstRange.Borders(dstEdge)
+        .LineStyle = srcRange.Borders(srcEdge).LineStyle
+        .Weight = srcRange.Borders(srcEdge).Weight
+        .Color = srcRange.Borders(srcEdge).Color
+        .TintAndShade = srcRange.Borders(srcEdge).TintAndShade
+    End With
+
+    On Error GoTo 0
+End Sub
+
+Private Function LastUsedRow(ByVal ws As Worksheet) As Long
+    On Error Resume Next
+    LastUsedRow = ws.Cells.Find(What:="*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious).Row
+    If Err.Number <> 0 Then LastUsedRow = 0
+    Err.Clear
+    On Error GoTo 0
+End Function
+
+Private Function LastUsedCol(ByVal ws As Worksheet) As Long
+    On Error Resume Next
+    LastUsedCol = ws.Cells.Find(What:="*", SearchOrder:=xlByColumns, SearchDirection:=xlPrevious).Column
+    If Err.Number <> 0 Then LastUsedCol = 0
+    Err.Clear
+    On Error GoTo 0
+End Function
+
+Private Function PreviousVisibleRow(ByVal ws As Worksheet, ByVal startRow As Long) As Long
+    Dim rowIndex As Long
+
+    For rowIndex = startRow To 1 Step -1
+        If ws.Rows(rowIndex).Hidden = False Then
+            PreviousVisibleRow = rowIndex
+            Exit Function
+        End If
+    Next rowIndex
+
+    PreviousVisibleRow = 0
+End Function
+
+Private Function NextVisibleRow(ByVal ws As Worksheet, ByVal startRow As Long, ByVal maxRow As Long) As Long
+    Dim rowIndex As Long
+
+    For rowIndex = startRow To maxRow
+        If ws.Rows(rowIndex).Hidden = False Then
+            NextVisibleRow = rowIndex
+            Exit Function
+        End If
+    Next rowIndex
+
+    NextVisibleRow = 0
+End Function
 
 Private Function IsEmailCheckboxSelected() As Boolean
     Dim ctrl As Object

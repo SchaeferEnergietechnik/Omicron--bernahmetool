@@ -42,7 +42,7 @@ type DesktopApi = {
   runWorker: (job: unknown, workerPath: string, pythonPath?: string) => Promise<number>
   shutdownComputer: () => Promise<{ scheduled: boolean; delaySeconds: number }>
   cancelWorker: () => Promise<void>
-  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; reportPath?: string; inspector?: string; examDate?: string; customer?: string; options?: string[]; candidates?: string[] }) => void) => () => void
+  onWorkerEvent: (callback: (event: { event: string; itemId?: string; message?: string; index?: number; total?: number; itemCount?: number; occPath?: string; excelPath?: string; elapsedSeconds?: number; succeededCount?: number; failedCount?: number; skippedCount?: number; archiveWarningCount?: number; reportPath?: string; inspector?: string; examDate?: string; customer?: string; options?: string[]; candidates?: string[]; archived?: boolean; sourcePath?: string; targetPath?: string }) => void) => () => void
   onImportEvent: (callback: (event: { event: string; scannedCount?: number; foundCount?: number; skippedCount?: number; excludedCount?: number; currentPath?: string }) => void) => () => void
 }
 
@@ -241,14 +241,41 @@ function App() {
       setFolders((current) => current.map((folder) => folder.id === event.itemId
         ? {
             ...folder,
-            state: 'fertig',
+            state: event.archived === false ? evaluateFolderState(folder) : 'fertig',
             customerResolution: 'none',
             customerOptions: undefined,
             customerCandidates: undefined,
-            message: undefined,
+            message: event.archived === false
+              ? (folder.message ?? 'Verarbeitet, aber nicht nach Protokollentwürfe verschoben.')
+              : undefined,
           }
         : folder))
       setProgress((current) => ({ ...current, completed: current.completed + 1, detail: 'Eintrag erfolgreich abgeschlossen' }))
+    }
+    if (event.event === 'folder_archived') {
+      if (!event.itemId) return
+      setFolders((current) => current.map((folder) => folder.id === event.itemId
+        ? {
+            ...folder,
+            message: event.targetPath
+              ? `Nach Protokollentwürfe verschoben: ${event.targetPath}`
+              : 'Nach Protokollentwürfe verschoben.',
+          }
+        : folder))
+      return
+    }
+    if (event.event === 'folder_archive_conflict' || event.event === 'folder_archive_failed' || event.event === 'folder_archive_skipped') {
+      if (!event.itemId) return
+      setFolders((current) => current.map((folder) => {
+        if (folder.id !== event.itemId) return folder
+        const updated: WorkFolder = {
+          ...folder,
+          message: event.message ?? 'Archivierung nach Protokollentwürfe nicht möglich.',
+        }
+        return { ...updated, state: evaluateFolderState(updated) }
+      }))
+      setNotice(event.message ?? 'Archivierung nach Protokollentwürfe nicht möglich.')
+      return
     }
     if (event.event === 'customer_assigned') {
       if (!event.itemId) return
@@ -329,8 +356,10 @@ function App() {
       const succeeded = event.succeededCount ?? 0
       const failed = event.failedCount ?? 0
       const skipped = event.skippedCount ?? 0
+      const archiveWarnings = event.archiveWarningCount ?? 0
+      const archiveInfo = archiveWarnings > 0 ? ` Archiv-Hinweise: ${archiveWarnings}.` : ''
       const reportInfo = event.reportPath ? ` Fehlerbericht: ${event.reportPath}.` : ''
-      setNotice(`Verarbeitung abgeschlossen. Erfolg: ${succeeded}, Fehler: ${failed}, Übersprungen: ${skipped}. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.${reportInfo}`)
+      setNotice(`Verarbeitung abgeschlossen. Erfolg: ${succeeded}, Fehler: ${failed}, Übersprungen: ${skipped}.${archiveInfo} Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.${reportInfo}`)
       setRunStartedAt(null)
     }
   }), [])
@@ -512,6 +541,8 @@ function App() {
 
     const items = processingFolders.map((folder) => ({
       enabled: folder.enabled ?? true,
+      workingDirectory: folder.localPath,
+      folderRelativePath: folder.path,
       ...(folder.manualCustomer?.trim() ? { manualCustomer: folder.manualCustomer.trim() } : {}),
       ...(folder.excelFiles.length === 1
         ? {
@@ -540,7 +571,8 @@ function App() {
     try {
       await window.desktopApi.prepareLocalFolders(copyPlan)
       setProgress((current) => ({ ...current, detail: 'Worker wird gestartet' }))
-      const exitCode = await window.desktopApi.runWorker({ items, reportPath, skipSectionMacro }, '')
+      const archiveRoot = `${localPath}\Protokollentwuerfe`
+      const exitCode = await window.desktopApi.runWorker({ items, reportPath, archiveRoot, skipSectionMacro }, '')
       if (shutdownAfterRun && exitCode !== 2) {
         try {
           const result = await window.desktopApi.shutdownComputer()

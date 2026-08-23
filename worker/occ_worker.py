@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -130,6 +131,7 @@ class Worker:
         self.run_started_monotonic: float | None = None
         self.failures: list[dict[str, str]] = []
         self.skipped: list[dict[str, str]] = []
+        self.archive_warnings: list[dict[str, str]] = []
         self.skip_section_macro = bool(job.get("skipSectionMacro", False))
 
     def emit(self, event: str, **payload: Any) -> None:
@@ -399,13 +401,97 @@ class Worker:
                 "succeeded": succeeded,
                 "failed": failed,
                 "skipped": skipped,
+                "archiveWarnings": len(self.archive_warnings),
             },
             "failures": self.failures,
             "skippedItems": self.skipped,
+            "archiveWarnings": self.archive_warnings,
         }
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return str(report_path)
+
+    def archive_root_directory(self) -> Path | None:
+        value = self.job.get("archiveRoot")
+        if not value:
+            return None
+        return Path(str(value))
+
+    def relative_folder_path(self, item: dict[str, Any], source_dir: Path) -> Path:
+        relative_value = str(item.get("folderRelativePath", "")).strip()
+        if relative_value:
+            normalized = relative_value.replace("\\", "/").strip("/")
+            parts = [part for part in normalized.split("/") if part and part != "."]
+            if parts:
+                return Path(*parts)
+        return Path(source_dir.name)
+
+    def archive_processed_folder(self, item: dict[str, Any]) -> bool:
+        archive_root = self.archive_root_directory()
+        working_dir_value = item.get("workingDirectory")
+        item_id = str(item.get("id", ""))
+
+        if archive_root is None or not working_dir_value:
+            warning = "Archivierung übersprungen: archiveRoot oder workingDirectory fehlt"
+            self.emit("folder_archive_skipped", itemId=item_id, message=warning)
+            self.archive_warnings.append({"itemId": item_id, "message": warning})
+            return False
+
+        source_dir = Path(str(working_dir_value))
+        if not source_dir.is_dir():
+            warning = f"Archivierung übersprungen: Fundordner nicht gefunden ({source_dir})"
+            self.emit("folder_archive_skipped", itemId=item_id, sourcePath=str(source_dir), message=warning)
+            self.archive_warnings.append({"itemId": item_id, "sourcePath": str(source_dir), "message": warning})
+            return False
+
+        target_dir = archive_root / self.relative_folder_path(item, source_dir)
+        if target_dir.exists():
+            warning = f"Zielordner existiert bereits, keine Überschreibung: {target_dir}"
+            self.emit(
+                "folder_archive_conflict",
+                itemId=item_id,
+                sourcePath=str(source_dir),
+                targetPath=str(target_dir),
+                message=warning,
+            )
+            self.archive_warnings.append(
+                {
+                    "itemId": item_id,
+                    "sourcePath": str(source_dir),
+                    "targetPath": str(target_dir),
+                    "message": warning,
+                }
+            )
+            return False
+
+        try:
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source_dir), str(target_dir))
+            self.emit(
+                "folder_archived",
+                itemId=item_id,
+                sourcePath=str(source_dir),
+                targetPath=str(target_dir),
+            )
+            return True
+        except Exception as error:
+            warning = f"Archivierung fehlgeschlagen: {error}"
+            self.emit(
+                "folder_archive_failed",
+                itemId=item_id,
+                sourcePath=str(source_dir),
+                targetPath=str(target_dir),
+                message=warning,
+            )
+            self.archive_warnings.append(
+                {
+                    "itemId": item_id,
+                    "sourcePath": str(source_dir),
+                    "targetPath": str(target_dir),
+                    "message": warning,
+                }
+            )
+            return False
 
     def sort_occ_paths(self, occ_paths: list[Path]) -> list[Path]:
         """Sortiert OCC-Dateien stabil: zuerst nicht-EZE (z. B. NAP), dann EZE."""
@@ -1018,7 +1104,8 @@ class Worker:
                     
                     self.terminate_mashup_loader()
 
-                self.emit("item_completed", itemId=item_id)
+                archived = self.archive_processed_folder(item)
+                self.emit("item_completed", itemId=item_id, archived=archived)
                 succeeded_count += 1
             except CancellationRequested:
                 self.emit("run_cancelled", itemId=item_id, elapsedSeconds=self.elapsed_seconds())
@@ -1041,7 +1128,7 @@ class Worker:
 
         report_path = None
         try:
-            if failed_count > 0 or skipped_count > 0:
+            if failed_count > 0 or skipped_count > 0 or self.archive_warnings:
                 report_path = self.write_report_if_needed(succeeded_count, failed_count, skipped_count)
                 if report_path:
                     self.emit("run_report_written", reportPath=report_path)
@@ -1054,6 +1141,7 @@ class Worker:
             succeededCount=succeeded_count,
             failedCount=failed_count,
             skippedCount=skipped_count,
+            archiveWarningCount=len(self.archive_warnings),
             reportPath=report_path,
         )
         return 0 if failed_count == 0 else 1
