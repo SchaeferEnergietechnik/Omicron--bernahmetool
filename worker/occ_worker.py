@@ -533,15 +533,15 @@ class Worker:
         """Repair/normalize Measurements lookups in Daten-like sheets (A:X)."""
         repaired_by_sheet: dict[str, int] = {}
         pattern_en = re.compile(
-            r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),Measurements!\$E\$\d+:\$E\$\d+,0\)\+1\),(\d+)\)",
+            r"(@?)INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),Measurements!\$E\$\d+:\$E\$\d+,0\)\+1\),(\d+)\)",
             re.IGNORECASE,
         )
         pattern_ref = re.compile(
-            r"INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),\(Measurements\[MeasurementName\]\),0\)\+1\),(\d+)\)",
+            r"(@?)INDEX\(Measurements!\$A\$1:\$X\$\d+,\(MATCH\(C(\d+),\(Measurements\[MeasurementName\]\),0\)\+1\),(\d+)\)",
             re.IGNORECASE,
         )
         pattern_de = re.compile(
-            r"INDEX\(Measurements!\$A\$1:\$X\$\d+;\(VERGLEICH\(C(\d+);Measurements!\$E\$\d+:\$E\$\d+;0\)\+1\);(\d+)\)",
+            r"(@?)INDEX\(Measurements!\$A\$1:\$X\$\d+;\(VERGLEICH\(C(\d+);Measurements!\$E\$\d+:\$E\$\d+;0\)\+1\);(\d+)\)",
             re.IGNORECASE,
         )
 
@@ -554,15 +554,15 @@ class Worker:
                 .replace("#BEZUG!", "Measurements[MeasurementName]")
             )
             repaired = pattern_en.sub(
-                lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+                lambda m: f"{m.group(1)}INDEX(Measurements!$A:$X,MATCH(C{m.group(2)},Measurements!$E:$E,0),{m.group(3)})",
                 repaired,
             )
             repaired = pattern_ref.sub(
-                lambda m: f"INDEX(Measurements!$A:$X,MATCH(C{m.group(1)},Measurements!$E:$E,0),{m.group(2)})",
+                lambda m: f"{m.group(1)}INDEX(Measurements!$A:$X,MATCH(C{m.group(2)},Measurements!$E:$E,0),{m.group(3)})",
                 repaired,
             )
             repaired = pattern_de.sub(
-                lambda m: f"INDEX(Measurements!$A:$X;VERGLEICH(C{m.group(1)};Measurements!$E:$E;0);{m.group(2)})",
+                lambda m: f"{m.group(1)}INDEX(Measurements!$A:$X;VERGLEICH(C{m.group(2)};Measurements!$E:$E;0);{m.group(3)})",
                 repaired,
             )
             return repaired
