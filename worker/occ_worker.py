@@ -1079,6 +1079,23 @@ class Worker:
                 )
             self.check_cancelled()
 
+            try:
+                excel.CalculateFullRebuild()
+            except Exception as error:
+                self.emit(
+                    "excel_recalc_warning",
+                    itemId=item.get("id"),
+                    message=f"CalculateFullRebuild fehlgeschlagen, versuche CalculateFull: {error}",
+                )
+                try:
+                    excel.CalculateFull()
+                except Exception as calc_error:
+                    self.emit(
+                        "excel_recalc_warning",
+                        itemId=item.get("id"),
+                        message=f"CalculateFull ebenfalls fehlgeschlagen: {calc_error}",
+                    )
+
             if customer_assignment_failed_without_template:
                 project_title = self.fallback_title_from_inspector_and_date(
                     inspector_for_fallback,

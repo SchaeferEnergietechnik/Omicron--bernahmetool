@@ -2045,6 +2045,13 @@ def apply_changes_with_excel_com(
             _retry_excel_call(lambda: module.DeleteLines(1, module.CountOfLines))
         _retry_excel_call(lambda: module.AddFromString(FORM_CODE))
 
+        print(f"{path}: Schritt Vollberechnung vor Speichern ...")
+        try:
+            _retry_excel_call(lambda: excel.CalculateFullRebuild())
+        except Exception as error:
+            print(f"{path}: Hinweis: CalculateFullRebuild fehlgeschlagen, versuche CalculateFull: {error}")
+            _retry_excel_call(lambda: excel.CalculateFull())
+
         _retry_excel_call(lambda: workbook.Save())
         _retry_excel_call(lambda: workbook.Close(SaveChanges=True))
         workbook = None
