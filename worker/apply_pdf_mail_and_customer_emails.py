@@ -474,6 +474,26 @@ Private Sub txtVersion_Change()
 End Sub
 '''
 
+DATE_MACRO_CODE = r'''Option Explicit
+
+Public Sub AktuellesDatum()
+    ApplyCurrentDateToSelection
+End Sub
+
+Public Sub Datum()
+    ApplyCurrentDateToSelection
+End Sub
+
+Private Sub ApplyCurrentDateToSelection()
+    On Error Resume Next
+
+    If TypeName(Selection) = "Range" Then
+        Selection.Value = Date
+        Selection.NumberFormat = "dd.mm.yyyy"
+    End If
+End Sub
+'''
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -666,6 +686,78 @@ def restore_logos_from_reference(excel_app, target_workbook, reference_path: Pat
     finally:
         if ref_workbook is not None:
             ref_workbook.Close(SaveChanges=False)
+
+
+def restore_checkliste_dropdowns_from_reference(excel_app, target_workbook, reference_path: Path) -> bool:
+    ref_workbook = None
+    try:
+        ref_workbook = excel_app.Workbooks.Open(str(reference_path.resolve()), ReadOnly=True, AddToMru=False)
+        ws_src = ref_workbook.Worksheets("Schutzprüf-Checkliste")
+        ws_dst = target_workbook.Worksheets("Schutzprüf-Checkliste")
+
+        # xlPasteValidation = 6
+        ws_src.UsedRange.Copy()
+        ws_dst.UsedRange.PasteSpecial(Paste=6)
+        excel_app.CutCopyMode = False
+        return True
+    finally:
+        try:
+            excel_app.CutCopyMode = False
+        except Exception:
+            pass
+        if ref_workbook is not None:
+            ref_workbook.Close(SaveChanges=False)
+
+
+def ensure_aktuelles_datum_macro(workbook) -> int:
+    vbcomponents = workbook.VBProject.VBComponents
+    module_name = "modCopilotDateFix"
+
+    try:
+        component = vbcomponents(module_name)
+    except Exception:
+        # 1 = vbext_ct_StdModule
+        component = vbcomponents.Add(1)
+        component.Name = module_name
+
+    code_module = component.CodeModule
+    if code_module.CountOfLines > 0:
+        code_module.DeleteLines(1, code_module.CountOfLines)
+    code_module.AddFromString(DATE_MACRO_CODE)
+
+    rebound = 0
+    macro_ref = f"'{workbook.Name}'!AktuellesDatum"
+
+    for ws in workbook.Worksheets:
+        for i in range(1, int(ws.Shapes.Count) + 1):
+            shape = ws.Shapes(i)
+            text_blob = ""
+
+            try:
+                text_blob += " " + str(shape.TextFrame.Characters().Text)
+            except Exception:
+                pass
+
+            try:
+                text_blob += " " + str(shape.TextFrame2.TextRange.Text)
+            except Exception:
+                pass
+
+            try:
+                text_blob += " " + str(shape.OnAction)
+            except Exception:
+                pass
+
+            if "datum" not in text_blob.lower():
+                continue
+
+            try:
+                shape.OnAction = macro_ref
+                rebound += 1
+            except Exception:
+                continue
+
+    return rebound
 
 
 def backup_file(path: Path, suffix: str) -> Path:
@@ -1086,13 +1178,25 @@ def apply_changes_with_excel_com(
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
+        restored_dropdowns = False
+        rebound_datum_buttons = 0
         if reference_logo_path is not None:
+            print(f"{path}: Schritt Drop-downs aus V19 wiederherstellen ...")
+            restored_dropdowns = _retry_excel_call(
+                lambda: restore_checkliste_dropdowns_from_reference(excel, workbook, reference_logo_path)
+            )
+
             restored_logos = _retry_excel_call(
                 lambda: restore_logos_from_reference(excel, workbook, reference_logo_path)
             )
             print(f"{path}: Logos aus V19 wiederhergestellt (Anzahl: {restored_logos})")
+            print(f"{path}: Drop-downs in Schutzprüf-Checkliste wiederhergestellt: {restored_dropdowns}")
         else:
             print(f"{path}: Keine V19-Referenzdatei fuer Logo-Wiederherstellung gefunden")
+
+        print(f"{path}: Schritt Makro 'Aktuelles Datum' robust setzen ...")
+        rebound_datum_buttons = _retry_excel_call(lambda: ensure_aktuelles_datum_macro(workbook))
+        print(f"{path}: Buttons auf Makro AktuellesDatum gebunden: {rebound_datum_buttons}")
 
         component = _retry_excel_call(lambda: workbook.VBProject.VBComponents("frmPDFDruck"))
         module = component.CodeModule
