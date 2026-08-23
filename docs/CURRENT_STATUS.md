@@ -81,7 +81,7 @@ Das Python-Programm erwartet drei Makros:
 | `Modul1.BereicheEinOderAusblenden_Start` | fehlt; Ergänzung liegt als BAS-Datei vor |
 | `Tabelle7.ZeilenAusblendenWennLeer` | vorhanden und mit V19g identisch |
 
-Das bestehende private Ereignis `Tabelle7.CommandButton1_Click` in V19m darf nicht ersetzt werden. Es enthält zusätzlich eine W14-Regel für die Zeilen 159 bis 164. Die öffentliche Prozedur wird nur ergänzend in das leere `Modul1` importiert.
+Das bestehende private Ereignis `Tabelle7.CommandButton1_Click` in V19m darf nicht ersetzt werden. Es enthält die W14-Regel für die Zeilen 159 bis 164. Die öffentliche Prozedur in `Modul1` ist ergänzend vorhanden und enthält diese W14-Regel ebenfalls, damit Python-Aufruf und Button konsistent arbeiten.
 
 Die Binärdatei V19m wurde im Repository nicht verändert. Import, Kompilierung und Funktionstest müssen später unter Windows mit Excel an einer Sicherungskopie erfolgen.
 

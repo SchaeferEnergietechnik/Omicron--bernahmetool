@@ -10,6 +10,7 @@ V19G_DEFAULT = Path("samples/V19g_Übergeordneter_Entkupplungsschutz.xlsm")
 V19M_DEFAULT = Path("samples/V19m_Übergeordneter_Entkupplungsschutz.xlsm")
 MODULE_NAME = "Modul1"
 REQUIRED_PROCEDURE = "Public Sub BereicheEinOderAusblenden_Start()"
+W14_MARKER = 'Range("W14")'
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,6 +92,49 @@ def verify_required_procedure(workbook, module_name: str, procedure_signature: s
         )
 
 
+def build_module_code_with_w14_logic(module_code: str) -> str:
+    if W14_MARKER.lower() in module_code.lower():
+        return module_code
+
+    sub_name = "bereicheeinoderausblenden_start"
+    lower_code = module_code.lower()
+    start_index = lower_code.find(f"public sub {sub_name}()")
+    if start_index == -1:
+        raise RuntimeError("BereicheEinOderAusblenden_Start wurde in Modul1 nicht gefunden.")
+
+    end_index = lower_code.find("\nend sub", start_index)
+    if end_index == -1:
+        raise RuntimeError("End Sub von BereicheEinOderAusblenden_Start wurde nicht gefunden.")
+
+    w14_block = (
+        "\n"
+        "    If ThisWorkbook.Worksheets(\"Schutzpruef-Checkliste\").Range(\"W14\").Value = False Then\n"
+        "        ThisWorkbook.Worksheets(\"Pruefprotokoll\").Rows(\"159:164\").EntireRow.Hidden = True\n"
+        "    Else\n"
+        "        ThisWorkbook.Worksheets(\"Pruefprotokoll\").Rows(\"159:164\").EntireRow.Hidden = False\n"
+        "    End If\n"
+    )
+
+    return module_code[:end_index] + w14_block + module_code[end_index:]
+
+
+def ensure_w14_logic(workbook, module_name: str) -> None:
+    component = get_module(workbook.VBProject, module_name)
+    if component is None:
+        raise RuntimeError(f"Modul '{module_name}' wurde nicht gefunden.")
+
+    code_module = component.CodeModule
+    current_code = code_module.Lines(1, code_module.CountOfLines)
+    updated_code = build_module_code_with_w14_logic(current_code)
+
+    if updated_code == current_code:
+        return
+
+    if code_module.CountOfLines > 0:
+        code_module.DeleteLines(1, code_module.CountOfLines)
+    code_module.AddFromString(updated_code)
+
+
 def transfer_module(v19g_path: Path, v19m_path: Path, visible: bool) -> None:
     try:
         import pythoncom
@@ -127,6 +171,7 @@ def transfer_module(v19g_path: Path, v19m_path: Path, visible: bool) -> None:
             wb_m.VBProject.VBComponents.Import(str(temp_bas))
 
             verify_required_procedure(wb_m, MODULE_NAME, REQUIRED_PROCEDURE)
+            ensure_w14_logic(wb_m, MODULE_NAME)
             wb_m.Save()
 
         wb_g.Close(SaveChanges=False)

@@ -12,9 +12,9 @@ Die VBA-Projekte aus V19g und V19m wurden statisch verglichen.
 
 V19m enthält die weitgehend gleiche Bereichslogik bereits im privaten Ereignis `Tabelle7.CommandButton1_Click`. Python kann dieses private Button-Ereignis jedoch nicht als öffentliches Makro aufrufen. Deshalb wurde die Logik in V19g zusätzlich als `Public Sub BereicheEinOderAusblenden_Start` in `Modul1` bereitgestellt.
 
-Die beiden Varianten unterscheiden sich an einer Stelle: Der private V19m-Button wertet zusätzlich `Schutzprüf-Checkliste!W14` aus und blendet damit die Zeilen 159 bis 164 ein oder aus. Dieser Block ist im öffentlichen V19g-Makro nicht enthalten.
+Die beiden Varianten unterscheiden sich an einer Stelle: Der private V19m-Button wertet zusätzlich `Schutzprüf-Checkliste!W14` aus und blendet damit die Zeilen 159 bis 164 ein oder aus.
 
-**Folgerung:** Das bestehende private Button-Ereignis in V19m bleibt zunächst unverändert. Ergänzt wird ausschließlich die öffentliche Prozedur in `Modul1`. Damit bleibt die manuelle V19m-Funktion einschließlich W14-Regel erhalten, während der Python-Ablauf exakt die getestete V19g-Variante aufrufen kann.
+**Aktueller Stand:** Das bestehende private Button-Ereignis in V19m bleibt unverändert. Die öffentliche Prozedur in `Modul1` enthält zusätzlich ebenfalls die W14-Regel für die Zeilen 159 bis 164, damit der Python-Aufruf und der Button konsistent ausblenden.
 
 ## Empfohlene Übernahme
 
@@ -26,7 +26,8 @@ Die Datei `legacy/vba/V19m_Modul1_Ergaenzung.bas` enthält eine bereinigte, dire
 - Zeilennummern als `Long` statt `Integer`,
 - `Allgemeine Angaben` und `Prüfprotokoll` ausdrücklich über `ThisWorkbook` referenziert,
 - alle `Rows(...)` ausdrücklich auf `Prüfprotokoll` bezogen,
-- wiederholte Ein-/Ausblendlogik vereinfacht.
+- wiederholte Ein-/Ausblendlogik vereinfacht,
+- W14-Regel für `Schutzprüf-Checkliste!W14` ergänzt (Zeilen 159 bis 164).
 
 Die Fachlogik und verwendeten Zellen bleiben gleich.
 
@@ -56,6 +57,7 @@ Das Skript:
 - erstellt Sicherungskopien beider Sample-Dateien,
 - exportiert `Modul1` aus V19g,
 - ersetzt das Standardmodul `Modul1` in V19m,
+- ergänzt bei Bedarf die W14-Ausblendlogik in `BereicheEinOderAusblenden_Start`,
 - prüft, dass `Public Sub BereicheEinOderAusblenden_Start()` in V19m vorhanden ist,
 - speichert V19m.
 

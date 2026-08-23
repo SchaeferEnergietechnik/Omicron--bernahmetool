@@ -79,4 +79,10 @@ Public Sub BereicheEinOderAusblenden_Start()
     For zeile = H22 To H25
         wsProtokoll.Rows(zeile).Hidden = (wsAngaben.Range("C25").Value = "")
     Next zeile
+
+    If ThisWorkbook.Worksheets("Schutzprüf-Checkliste").Range("W14").Value = False Then
+        wsProtokoll.Rows("159:164").EntireRow.Hidden = True
+    Else
+        wsProtokoll.Rows("159:164").EntireRow.Hidden = False
+    End If
 End Sub
