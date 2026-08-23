@@ -851,12 +851,12 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Map "!" from checklist-linked fields to "NICHT OK" so existing warning semantics apply.
     formula_updates = {
-        "C105": "=IF('Schutzprüf-Checkliste'!E70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E70=\"!\",\"NICHT OK\",\"\"))",
-        "C106": "=IF('Schutzprüf-Checkliste'!E70=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E70=\"!\",\"NICHT OK\",\"\"))",
-        "C107": "=IF('Schutzprüf-Checkliste'!E71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E71=\"!\",\"NICHT OK\",\"\"))",
-        "C108": "=IF('Schutzprüf-Checkliste'!E71=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E71=\"!\",\"NICHT OK\",\"\"))",
-        "C114": "=IF('Schutzprüf-Checkliste'!E72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E72=\"!\",\"NICHT OK\",\"\"))",
-        "C115": "=IF('Schutzprüf-Checkliste'!E72=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E72=\"!\",\"NICHT OK\",\"\"))",
+        "C105": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!I70=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!J70=\"!\"),\"NICHT OK\",\"\"))",
+        "C106": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!K70=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!L70=\"!\"),\"NICHT OK\",\"\"))",
+        "C107": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!I71=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!J71=\"!\"),\"NICHT OK\",\"\"))",
+        "C108": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!K71=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!L71=\"!\"),\"NICHT OK\",\"\"))",
+        "C114": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!I72=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!J72=\"!\"),\"NICHT OK\",\"\"))",
+        "C115": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!K72=TRUE),\"x\",IF(OR('Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!L72=\"!\"),\"NICHT OK\",\"\"))",
         "C109": "=IF('Schutzprüf-Checkliste'!E74=\"x\",\"x\",IF('Schutzprüf-Checkliste'!E74=\"!\",\"NICHT OK\",\"\"))",
     }
     for cell, formula in formula_updates.items():
@@ -864,12 +864,12 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
 
     # Ensure description rows in Abschlussbemerkungen are also shown for "!".
     protokoll_formula_updates = {
-        "A169": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
-        "A170": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
-        "A171": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\"),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A172": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\"),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
-        "A173": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\"),'Allgemeine Angaben'!A114,\"\")",
-        "A174": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\"),'Allgemeine Angaben'!A115,\"\")",
+        "A169": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!J70=\"x\",'Schutzprüf-Checkliste'!J70=\"!\",'Schutzprüf-Checkliste'!I70=TRUE),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall der Hilfsspannung - AuxDC\",\"\")",
+        "A170": "=IF(OR('Schutzprüf-Checkliste'!E70=\"x\",'Schutzprüf-Checkliste'!E70=\"!\",'Schutzprüf-Checkliste'!L70=\"x\",'Schutzprüf-Checkliste'!L70=\"!\",'Schutzprüf-Checkliste'!K70=TRUE),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall der Hilfsspannung- AuxDC\",\"\")",
+        "A171": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!J71=\"x\",'Schutzprüf-Checkliste'!J71=\"!\",'Schutzprüf-Checkliste'!I71=TRUE),\"Abschaltung MS-LS\"&'Schutzprüf-Checkliste'!C67 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A172": "=IF(OR('Schutzprüf-Checkliste'!E71=\"x\",'Schutzprüf-Checkliste'!E71=\"!\",'Schutzprüf-Checkliste'!L71=\"x\",'Schutzprüf-Checkliste'!L71=\"!\",'Schutzprüf-Checkliste'!K71=TRUE),\"Abschaltung NS-LS\"&'Schutzprüf-Checkliste'!C68 &\" nach Ausfall Schutzrelais (Live Contact)\",\"\")",
+        "A173": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!J72=\"x\",'Schutzprüf-Checkliste'!J72=\"!\",'Schutzprüf-Checkliste'!I72=TRUE),'Allgemeine Angaben'!A114,\"\")",
+        "A174": "=IF(OR('Schutzprüf-Checkliste'!E72=\"x\",'Schutzprüf-Checkliste'!E72=\"!\",'Schutzprüf-Checkliste'!L72=\"x\",'Schutzprüf-Checkliste'!L72=\"!\",'Schutzprüf-Checkliste'!K72=TRUE),'Allgemeine Angaben'!A115,\"\")",
         "A182": "=IF(OR('Schutzprüf-Checkliste'!E74=\"x\",'Schutzprüf-Checkliste'!E74=\"!\"),\"DC USV für übergeordneter Schutz/ggfs. UMZ-Schutz in Ordnung\",\"\")",
     }
     for cell, formula in protokoll_formula_updates.items():
@@ -903,13 +903,13 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
     # Show station lock message in row 3 when any lower status is NICHT OK.
     lock_message = "Station gesperrt - Nicht alle Schutzfunktionen in Ordnung"
     lock_formula = (
-        "=IF(OR(COUNTIF($J$167:$J$175,\"NICHT OK\")>0,$J$182=\"NICHT OK\"),"
+        "=IF(OR(COUNTIF($J$167:$J$175,\"NICHT OK\")>0,$J$182=\"NICHT OK\",$J$169=\"NICHT OK\",$J$170=\"NICHT OK\",$J$171=\"NICHT OK\",$J$172=\"NICHT OK\",$J$173=\"NICHT OK\",$J$174=\"NICHT OK\"),"
         f"\"{lock_message}\""
         ",\"Prüfer\")"
     )
     ws_protokoll.Range("A3").Formula = lock_formula
 
-    lock_cf_formula = '=OR(COUNTIF($J$167:$J$175,"NICHT OK")>0,$J$182="NICHT OK")'
+    lock_cf_formula = '=OR(COUNTIF($J$167:$J$175,"NICHT OK")>0,$J$182="NICHT OK",$J$169="NICHT OK",$J$170="NICHT OK",$J$171="NICHT OK",$J$172="NICHT OK",$J$173="NICHT OK",$J$174="NICHT OK")'
     a3_cell = ws_protokoll.Range("A3")
     has_lock_cf_rule = False
     for i in range(1, int(a3_cell.FormatConditions.Count) + 1):
@@ -933,6 +933,29 @@ def apply_abschlussbemerkungen_nicht_ok_logic(workbook) -> None:
             # Style copy is best effort; enforce red background if no reference style is available.
             lock_rule.Interior.Color = 255
             lock_rule.Font.Color = 16777215
+
+
+def get_abschlussbemerkungen_debug_snapshot(workbook) -> dict[str, str]:
+    ws_angaben = workbook.Worksheets("Allgemeine Angaben")
+    ws_protokoll = workbook.Worksheets("Prüfprotokoll")
+    keys = {
+        "C105": ws_angaben.Range("C105").Formula,
+        "C106": ws_angaben.Range("C106").Formula,
+        "C107": ws_angaben.Range("C107").Formula,
+        "C108": ws_angaben.Range("C108").Formula,
+        "C109": ws_angaben.Range("C109").Formula,
+        "C114": ws_angaben.Range("C114").Formula,
+        "C115": ws_angaben.Range("C115").Formula,
+        "A169": ws_protokoll.Range("A169").Formula,
+        "A170": ws_protokoll.Range("A170").Formula,
+        "A171": ws_protokoll.Range("A171").Formula,
+        "A172": ws_protokoll.Range("A172").Formula,
+        "A173": ws_protokoll.Range("A173").Formula,
+        "A174": ws_protokoll.Range("A174").Formula,
+        "A182": ws_protokoll.Range("A182").Formula,
+        "A3": ws_protokoll.Range("A3").Formula,
+    }
+    return {k: str(v) for k, v in keys.items()}
 
 
 def patch_pdf_form_vba(path: Path, visible: bool) -> None:
@@ -1054,6 +1077,7 @@ def apply_changes_with_excel_com(
 
         updated, missing = _retry_excel_call(lambda: update_customer_sheet_excel_com(workbook, source_rows))
         _retry_excel_call(lambda: apply_abschlussbemerkungen_nicht_ok_logic(workbook))
+        debug_snapshot = _retry_excel_call(lambda: get_abschlussbemerkungen_debug_snapshot(workbook))
 
         reference_logo_path = resolve_logo_reference_path(path)
         restored_logos = 0
@@ -1077,6 +1101,10 @@ def apply_changes_with_excel_com(
 
         if temp_workbook_path is not None:
             shutil.copy2(temp_workbook_path, original_path)
+
+        print(f"{path}: Abschlussbemerkungen-Formeln aktualisiert")
+        for key, value in debug_snapshot.items():
+            print(f"{path}: {key} -> {value}")
 
         return updated, missing
     finally:
