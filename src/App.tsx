@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Archive,
   Check,
@@ -147,6 +147,7 @@ function App() {
   const [currentStep, setCurrentStep] = useState('Vorbereitung')
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const elapsedSecondsRef = useRef(0)
 
   function formatDuration(totalSeconds: number) {
     const minutes = Math.floor(totalSeconds / 60)
@@ -163,10 +164,11 @@ function App() {
   }, [isRunning, runStartedAt])
 
   useEffect(() => {
-    if (!isScanning) {
-      setScanPulse(0)
-      return
-    }
+    elapsedSecondsRef.current = elapsedSeconds
+  }, [elapsedSeconds])
+
+  useEffect(() => {
+    if (!isScanning) return
     const timer = window.setInterval(() => {
       setScanPulse((current) => (current + 1) % 20)
     }, 700)
@@ -334,13 +336,13 @@ function App() {
     if (event.event === 'run_cancelled') {
       setCurrentStep('Abbruch')
       if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
-      setNotice(`Verarbeitung kontrolliert abgebrochen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      setNotice(`Verarbeitung kontrolliert abgebrochen. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSecondsRef.current)}.`)
       setRunStartedAt(null)
     }
     if (event.event === 'run_failed') {
       setCurrentStep('Fehlerbehandlung')
       if (typeof event.elapsedSeconds === 'number') setElapsedSeconds(event.elapsedSeconds)
-      setNotice(`Verarbeitung gestoppt: ${event.message ?? 'Unbekannter Fehler'}. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.`)
+      setNotice(`Verarbeitung gestoppt: ${event.message ?? 'Unbekannter Fehler'}. Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSecondsRef.current)}.`)
       setRunStartedAt(null)
     }
     if (event.event === 'run_report_written') {
@@ -359,7 +361,7 @@ function App() {
       const archiveWarnings = event.archiveWarningCount ?? 0
       const archiveInfo = archiveWarnings > 0 ? ` Archiv-Hinweise: ${archiveWarnings}.` : ''
       const reportInfo = event.reportPath ? ` Fehlerbericht: ${event.reportPath}.` : ''
-      setNotice(`Verarbeitung abgeschlossen. Erfolg: ${succeeded}, Fehler: ${failed}, Übersprungen: ${skipped}.${archiveInfo} Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSeconds)}.${reportInfo}`)
+      setNotice(`Verarbeitung abgeschlossen. Erfolg: ${succeeded}, Fehler: ${failed}, Übersprungen: ${skipped}.${archiveInfo} Laufzeit: ${formatDuration(typeof event.elapsedSeconds === 'number' ? event.elapsedSeconds : elapsedSecondsRef.current)}.${reportInfo}`)
       setRunStartedAt(null)
     }
   }), [])
@@ -497,6 +499,7 @@ function App() {
       setNotice(`Der Import konnte nicht abgeschlossen werden: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`)
     } finally {
       setIsScanning(false)
+      setScanPulse(0)
       setScanProgress((current) => ({ ...current, currentPath: '' }))
     }
   }

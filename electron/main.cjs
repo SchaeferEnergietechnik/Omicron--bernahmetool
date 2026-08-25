@@ -169,7 +169,6 @@ async function findFolders(root, onProgress) {
   }
 
   async function workerLoop() {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const task = queue.shift()
       if (!task) return
