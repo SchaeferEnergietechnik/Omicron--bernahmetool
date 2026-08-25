@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron')
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
+const fsSync = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
@@ -10,9 +11,99 @@ let cancelFile
 function resolveWorkerPath(overridePath) {
   if (overridePath) return overridePath
   if (app.isPackaged) {
+    const bundledExe = path.join(process.resourcesPath, 'app.asar.unpacked', 'worker', 'dist', 'occ_worker.exe')
+    if (fsSync.existsSync(bundledExe)) return bundledExe
     return path.join(process.resourcesPath, 'app.asar.unpacked', 'worker', 'occ_worker.py')
   }
   return path.join(__dirname, '..', 'worker', 'occ_worker.py')
+}
+
+function resolveWorkerLaunch(workerPath, pythonPath) {
+  const resolvedWorkerPath = resolveWorkerPath(workerPath)
+  const isExecutable = resolvedWorkerPath.toLowerCase().endsWith('.exe')
+  if (isExecutable) {
+    return {
+      command: resolvedWorkerPath,
+      argsPrefix: [],
+      workerPath: resolvedWorkerPath,
+      mode: 'exe',
+    }
+  }
+
+  return {
+    ...resolvePythonLaunch(pythonPath),
+    workerPath: resolvedWorkerPath,
+    mode: 'python',
+  }
+}
+
+function looksLikeWindowsAliasHint(text) {
+  return /app[- ]?ausf|app execution aliases|run without arguments to install|python was not found/i.test(text)
+}
+
+function probePythonCandidate(command, prefixArgs = []) {
+  const result = spawnSync(command, [...prefixArgs, '--version'], {
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: 'pipe',
+  })
+  if (result.error) {
+    return {
+      ok: false,
+      aliasHint: false,
+      details: result.error.message,
+    }
+  }
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim()
+  if (result.status === 0) {
+    return {
+      ok: true,
+      aliasHint: false,
+      details: output,
+    }
+  }
+  return {
+    ok: false,
+    aliasHint: looksLikeWindowsAliasHint(output),
+    details: output || `Exit-Code ${result.status ?? 'unbekannt'}`,
+  }
+}
+
+function resolvePythonLaunch(pythonPath) {
+  if (pythonPath && pythonPath.trim()) {
+    return { command: pythonPath.trim(), prefixArgs: [] }
+  }
+
+  const candidates = []
+  if (process.platform === 'win32') {
+    if (app.isPackaged) {
+      const embeddedPython = path.join(process.resourcesPath, 'python', 'python.exe')
+      candidates.push({ command: embeddedPython, prefixArgs: [] })
+    }
+    candidates.push({ command: 'py', prefixArgs: ['-3'] })
+    candidates.push({ command: 'python', prefixArgs: [] })
+    candidates.push({ command: 'python3', prefixArgs: [] })
+  } else {
+    candidates.push({ command: 'python3', prefixArgs: [] })
+    candidates.push({ command: 'python', prefixArgs: [] })
+  }
+
+  let aliasHintSeen = false
+  const tried = []
+  for (const candidate of candidates) {
+    const probe = probePythonCandidate(candidate.command, candidate.prefixArgs)
+    const printable = `${candidate.command}${candidate.prefixArgs.length ? ` ${candidate.prefixArgs.join(' ')}` : ''}`
+    tried.push(`${printable}${probe.details ? ` -> ${probe.details}` : ''}`)
+    if (probe.ok) return candidate
+    if (probe.aliasHint) aliasHintSeen = true
+  }
+
+  const aliasHint = aliasHintSeen
+    ? 'Hinweis: Unter Windows blockiert oft der App-Ausfuehrungsalias fuer "python". In den Einstellungen kann der Alias deaktiviert werden.'
+    : ''
+  throw new Error(
+    `Kein nutzbarer Python-Interpreter gefunden. Bitte Python 3.10+ installieren (inkl. py-Launcher) oder einen expliziten Interpreterpfad uebergeben. ${aliasHint} Gepruefte Kandidaten: ${tried.join(' | ')}`,
+  )
 }
 
 function createWindow() {
@@ -198,8 +289,17 @@ ipcMain.handle('run-worker', async (event, { job, workerPath, pythonPath }) => {
   const jobFile = path.join(app.getPath('temp'), `omicron-job-${Date.now()}.json`)
   cancelFile = path.join(app.getPath('temp'), `omicron-cancel-${Date.now()}`)
   await fs.writeFile(jobFile, JSON.stringify(job, null, 2), 'utf8')
-  const resolvedWorkerPath = resolveWorkerPath(workerPath)
-  workerProcess = spawn(pythonPath || 'python', [resolvedWorkerPath, jobFile, '--cancel-file', cancelFile], { windowsHide: false })
+  const workerLaunch = resolveWorkerLaunch(workerPath, pythonPath)
+  const workerArgs = workerLaunch.mode === 'exe'
+    ? [jobFile, '--cancel-file', cancelFile]
+    : [...workerLaunch.prefixArgs, workerLaunch.workerPath, jobFile, '--cancel-file', cancelFile]
+  event.sender.send('worker-event', {
+    event: 'worker_log',
+    message: workerLaunch.mode === 'exe'
+      ? `Worker-Start (EXE): ${workerLaunch.command} ${workerArgs.join(' ')}`
+      : `Worker-Start (Python): ${workerLaunch.command} ${workerArgs.join(' ')}`,
+  })
+  workerProcess = spawn(workerLaunch.command, workerArgs, { windowsHide: false })
   workerProcess.stdout.on('data', (data) => {
     for (const line of data.toString().split(/\r?\n/).filter(Boolean)) {
       try { event.sender.send('worker-event', JSON.parse(line)) } catch { event.sender.send('worker-event', { event: 'worker_log', message: line }) }

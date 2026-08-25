@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "desktop": "npm run build && electron .",
-    "desktop:dist": "npm run build && electron-builder --win"
+    "worker:build:win": "py -3 -m PyInstaller --noconfirm --clean --onefile --name occ_worker --distpath worker/dist --workpath worker/build --specpath worker/build --hidden-import win32timezone --collect-all pywinauto --collect-all win32com worker/occ_worker.py",
+    "worker:check:win": "node scripts/check-worker-exe.cjs",
+    "desktop:dist": "npm run build && npm run worker:check:win && electron-builder --win"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

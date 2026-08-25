@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Worker build artifacts
+worker/build/
+worker/dist/

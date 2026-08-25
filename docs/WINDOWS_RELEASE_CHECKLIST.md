@@ -17,10 +17,29 @@
 ## 3) Build auf Windows (Installer)
 
 - Build auf echtem Windows-Rechner ausfuehren
-- Befehl: npm run desktop:dist
+- Worker-EXE bauen: npm run worker:build:win
+- Danach Desktop-Installer: npm run desktop:dist
 - Erwartete Artefakte in dist:
+  - occ_worker.exe unter worker/dist
   - Omicron Uebernahmetool Setup <version>.exe (NSIS)
   - win-unpacked Verzeichnis
+
+Empfohlene Befehlsreihenfolge (copy/paste):
+
+```powershell
+npm ci
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r worker\requirements.txt -r worker\requirements-build.txt
+npm run lint
+npm run build
+npm run worker:build:win
+npm run desktop:dist
+Get-Item .\worker\dist\occ_worker.exe
+Get-ChildItem .\dist\*Setup*.exe
+Get-FileHash .\dist\*Setup*.exe -Algorithm SHA256
+```
 
 ## 4) Build im Linux-Container (Fallback)
 
@@ -39,9 +58,7 @@
 
 - Windows mit installiertem Microsoft Excel
 - Omicron Control Center installiert
-- Python 3.10+ vorhanden
-- Python Worker-Abhaengigkeiten installiert:
-  - python -m pip install -r worker\requirements.txt
+- Kein Python am Zielrechner erforderlich (Worker ist als occ_worker.exe gebuendelt)
 - Zugriff auf Y:\GES Energietechnik\Termine.xlsx verifiziert
 
 ## 7) Smoke Test vor Freigabe

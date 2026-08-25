@@ -571,7 +571,7 @@ function App() {
     try {
       await window.desktopApi.prepareLocalFolders(copyPlan)
       setProgress((current) => ({ ...current, detail: 'Worker wird gestartet' }))
-      const archiveRoot = `${localPath}\Protokollentwuerfe`
+      const archiveRoot = `${localPath}\\Protokollentwuerfe`
       const exitCode = await window.desktopApi.runWorker({ items, reportPath, archiveRoot, skipSectionMacro }, '')
       if (shutdownAfterRun && exitCode !== 2) {
         try {
